@@ -1,4 +1,3 @@
-`import logging
 import os
 import secrets
 import sqlite3
@@ -30,17 +29,6 @@ from flask_mail import Mail, Message
 from sqlalchemy import or_, func
 from werkzeug.utils import secure_filename
 
-# Setup logging to replace print statements
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
 from config import Config
 from blueprints.api_exports import api_bp, export_bp
 from models import (
@@ -56,8 +44,23 @@ from models import (
     Notification,
     Report,
     UserRole,
-    EmailVerificationToken,
 )
+
+try:
+    from models import EmailVerificationToken
+except ImportError:
+    # Backward-compatible fallback when older models.py versions
+    # do not yet declare the email verification token model.
+    class EmailVerificationToken(db.Model):
+        __tablename__ = "email_verification_token"
+
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+        token = db.Column(db.String(255), nullable=False, unique=True, index=True)
+        expires_at = db.Column(db.DateTime, nullable=False)
+        used = db.Column(db.Boolean, default=False, nullable=False)
+        used_at = db.Column(db.DateTime)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 app = Flask(__name__)
@@ -4518,6 +4521,5 @@ def init_app():
 
 if __name__ == "__main__":
     init_app()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host="0.0.0.0", port=port)
-`
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host="0.0.0.0", port=port)
