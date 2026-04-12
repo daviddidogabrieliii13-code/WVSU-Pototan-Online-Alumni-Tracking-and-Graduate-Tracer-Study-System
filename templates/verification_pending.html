@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Email Verification Pending - WVSU Alumni System{% endblock %}
+
+{% block content %}
+<div class="container page-stack" style="padding-top: var(--space-xl);">
+    <section class="section-card">
+        <h1>Email Verification Required</h1>
+        <p class="text-muted">
+            Account: <strong>{{ email }}</strong><br>
+            Portal: <strong>{{ role_label }}</strong>
+        </p>
+        <p>
+            Please verify your email address before signing in. This protects your account and enables secure notifications.
+        </p>
+
+        {% if preview_link %}
+        <div class="otp-info">
+            <strong>Verification Link ({{ delivery_mode | upper }})</strong>
+            <p style="margin-top: 0.45rem; margin-bottom: 0;">
+                This fallback link is shown because SMTP delivery is disabled or using the school-domain UI flow.
+            </p>
+            <p style="margin-top: 0.55rem; margin-bottom: 0;">
+                <a href="{{ preview_link }}">{{ preview_link }}</a>
+            </p>
+            {% if expires_at %}
+            <p style="margin-top: 0.45rem; margin-bottom: 0;">Expires at: {{ expires_at }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="module-form-actions">
+            <form method="POST" action="{{ url_for('resend_verification') }}" class="inline-form">
+                <input type="hidden" name="email" value="{{ email }}">
+                <input type="hidden" name="role" value="{{ role_slug }}">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Resend Verification Link
+                </button>
+            </form>
+            <a href="{{ login_url }}" class="btn btn-outline">
+                <i class="fas fa-sign-in-alt"></i> Back to Login
+            </a>
+            <a href="{{ register_url }}" class="btn btn-outline">
+                <i class="fas fa-user-plus"></i> Back to Register
+            </a>
+        </div>
+    </section>
+</div>
+{% endblock %}

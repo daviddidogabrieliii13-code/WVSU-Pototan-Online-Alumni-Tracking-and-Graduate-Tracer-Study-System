@@ -29,6 +29,9 @@
         <a href="{{ url_for('admin_surveys') }}" class="sidebar-link {% if 'admin_surveys' in request.endpoint %}active{% endif %}">
             <i class="fas fa-poll"></i> Surveys
         </a>
+        <a href="{{ url_for('admin_password_management') }}" class="sidebar-link {% if 'admin_password_management' in request.endpoint or 'admin_reset_user_password' in request.endpoint %}active{% endif %}">
+            <i class="fas fa-user-lock"></i> Password Management
+        </a>
         <a href="{{ url_for('admin_system_reset') }}" class="sidebar-link {% if 'admin_system_reset' in request.endpoint %}active{% endif %}">
             <i class="fas fa-database"></i> System Reset
         </a>

@@ -1,0 +1,62 @@
+﻿{% extends "base.html" %}
+
+{% block title %}Notifications - WVSU Alumni System{% endblock %}
+
+{% block content %}
+<div class="container page-stack" style="padding-top: var(--space-xl);">
+    <section class="section-card">
+        <div class="module-form-header">
+            <div>
+                <h1>Notifications</h1>
+                <p class="text-muted">Unread: {{ unread_count }}</p>
+            </div>
+            <div class="module-form-actions">
+                <a href="{{ url_for('notifications', unread=1) }}" class="btn btn-outline btn-sm">Unread Only</a>
+                <a href="{{ url_for('notifications') }}" class="btn btn-outline btn-sm">Show All</a>
+                <form method="POST" action="{{ url_for('mark_all_notifications_read') }}" class="inline-form">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="fas fa-check-double"></i> Mark All Read
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    {% if notifications %}
+    <section class="page-stack">
+        {% for item in notifications %}
+        <article class="section-card" style="{% if not item.is_read %}border-color: rgba(47, 111, 201, 0.45);{% endif %}">
+            <div class="module-form-header">
+                <div>
+                    <h3 style="margin-bottom: 0.35rem;">{{ item.title }}</h3>
+                    <p class="text-muted" style="margin-bottom: 0.35rem;">
+                        {{ item.notification_type | default('system') | upper }} - {{ item.created_at.strftime('%Y-%m-%d %H:%M') if item.created_at else '' }}
+                    </p>
+                    <p style="margin: 0;">{{ item.message }}</p>
+                </div>
+                <div>
+                    {% if not item.is_read %}
+                    <form method="POST" action="{{ url_for('mark_notification_read', notification_id=item.id) }}" class="inline-form">
+                        <button type="submit" class="btn btn-outline btn-sm">
+                            <i class="fas fa-check"></i> Mark Read
+                        </button>
+                    </form>
+                    {% else %}
+                    <span class="badge badge-success">Read</span>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+    {% else %}
+    <section class="empty-state section-card">
+        <i class="fas fa-bell-slash"></i>
+        <h3>No Notifications Yet</h3>
+        <p>You will see job and event announcements here.</p>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+

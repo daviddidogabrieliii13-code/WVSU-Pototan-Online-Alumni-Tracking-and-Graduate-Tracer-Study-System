@@ -16,6 +16,7 @@ from flask import (
     Flask,
     Response,
     abort,
+    jsonify,
     render_template,
     redirect,
     url_for,
@@ -24,10 +25,12 @@ from flask import (
     session,
 )
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from flask_mail import Mail, Message
 from sqlalchemy import or_, func
 from werkzeug.utils import secure_filename
 
 from config import Config
+from blueprints.api_exports import api_bp, export_bp
 from models import (
     db,
     User,
@@ -42,6 +45,22 @@ from models import (
     Report,
     UserRole,
 )
+
+try:
+    from models import EmailVerificationToken
+except ImportError:
+    # Backward-compatible fallback when older models.py versions
+    # do not yet declare the email verification token model.
+    class EmailVerificationToken(db.Model):
+        __tablename__ = "email_verification_token"
+
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+        token = db.Column(db.String(255), nullable=False, unique=True, index=True)
+        expires_at = db.Column(db.DateTime, nullable=False)
+        used = db.Column(db.Boolean, default=False, nullable=False)
+        used_at = db.Column(db.DateTime)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 app = Flask(__name__)
@@ -62,6 +81,9 @@ os.makedirs(profile_photo_folder, exist_ok=True)
 app.config["PROFILE_PHOTO_FOLDER"] = profile_photo_folder
 
 db.init_app(app)
+mail = Mail(app)
+app.register_blueprint(api_bp)
+app.register_blueprint(export_bp)
 
 login_manager = LoginManager()
 login_manager.login_view = "login"
@@ -76,6 +98,11 @@ app.config.setdefault("OTP_MAX_ATTEMPTS", 5)
 app.config.setdefault("OTP_RESEND_COOLDOWN_SECONDS", 45)
 app.config.setdefault("OTP_LOCKOUT_SECONDS", 300)
 app.config.setdefault("RSVP_ALLOWED_ROLES", "alumni")
+app.config.setdefault("EMAIL_VERIFICATION_REQUIRED", True)
+app.config.setdefault("EMAIL_VERIFICATION_EXPIRY_HOURS", 24)
+app.config.setdefault("EMAIL_NOTIFICATION_ENABLED", True)
+app.config.setdefault("EMAIL_MOCK_MODE", False)
+app.config.setdefault("MAIL_SUPPRESS_SEND", False)
 try:
     app.config["OTP_EXPIRY_SECONDS"] = int(
         os.environ.get("OTP_EXPIRY_SECONDS", app.config["OTP_EXPIRY_SECONDS"])
@@ -120,6 +147,21 @@ if show_otp_env is not None:
         "yes",
         "on",
     }
+
+for key in ("EMAIL_VERIFICATION_REQUIRED", "EMAIL_NOTIFICATION_ENABLED", "EMAIL_MOCK_MODE", "MAIL_SUPPRESS_SEND"):
+    raw = os.environ.get(key)
+    if raw is not None:
+        app.config[key] = raw.strip().lower() in {"1", "true", "yes", "on"}
+
+try:
+    app.config["EMAIL_VERIFICATION_EXPIRY_HOURS"] = int(
+        os.environ.get(
+            "EMAIL_VERIFICATION_EXPIRY_HOURS",
+            app.config.get("EMAIL_VERIFICATION_EXPIRY_HOURS", 24),
+        )
+    )
+except (TypeError, ValueError):
+    app.config["EMAIL_VERIFICATION_EXPIRY_HOURS"] = 24
 
 ROLE_PORTALS = {
     "alumni": {"label": "Alumni", "dashboard_template": "alumni_dashboard.html"},
@@ -179,6 +221,10 @@ RSVP_STATUS_LABELS = {
 }
 
 EVENT_TYPE_OPTIONS = {"reunion", "career_fair", "workshop", "gathering"}
+NOTIF_TYPE_JOB = "job"
+NOTIF_TYPE_EVENT = "event"
+NOTIF_TYPE_SYSTEM = "system"
+EMAIL_CONTEXT_SESSION_KEY = "email_verification_context"
 
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 PROFILE_PHOTO_WEB_PREFIX = "uploads/profile_photos/"
@@ -371,7 +417,6 @@ def clear_active_session():
     session.pop(ACTIVE_USER_ID_KEY, None)
     session.pop(ACTIVE_ROLE_KEY, None)
     session.pop(POST_LOGIN_NEXT_KEY, None)
-
 
 def clear_otp_context():
     session.pop(OTP_SESSION_KEY, None)
@@ -684,15 +729,21 @@ def resolve_requested_role(default=None):
 def inject_role():
     role_value = None
     current_dashboard_url = None
+    unread_notifications_count = 0
     if current_user.is_authenticated:
         role_value = to_role_slug(current_user.role, default="alumni")
         current_dashboard_url = role_dashboard_url(role_value)
+        unread_notifications_count = Notification.query.filter_by(
+            user_id=current_user.id,
+            is_read=False,
+        ).count()
     return {
         "current_role": role_value,
         "current_dashboard_url": current_dashboard_url,
         "role_portals": ROLE_PORTALS,
         "rsvp_allowed_roles": sorted(get_rsvp_allowed_roles()),
         "campus_logo_static_path": url_for("static", filename=CAMPUS_LOGO_FILE),
+        "unread_notifications_count": unread_notifications_count,
     }
 
 
@@ -921,6 +972,13 @@ def set_user_approval_defaults(user, role_slug):
 
 
 def sync_user_activation_state(user):
+    # Email verification is an additional activation guard on top of OTP + role approval.
+    if app.config.get("EMAIL_VERIFICATION_REQUIRED", True) and not bool(
+        getattr(user, "email_verified", True)
+    ):
+        user.is_active = False
+        return
+
     role_slug = to_role_slug(user.role, default="alumni")
     approved = is_user_approved(user)
     if role_requires_approval(role_slug):
@@ -1014,6 +1072,308 @@ def safe_commit(error_message="Unable to save changes. Please try again."):
         return False
 
 
+def generate_temporary_password(length=12):
+    """
+    Generate a temporary password with mixed character classes.
+    Uses `secrets` for cryptographic randomness.
+    """
+    length = max(10, int(length or 12))
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?"
+    while True:
+        candidate = "".join(secrets.choice(alphabet) for _ in range(length))
+        has_upper = any(ch.isupper() for ch in candidate)
+        has_lower = any(ch.islower() for ch in candidate)
+        has_digit = any(ch.isdigit() for ch in candidate)
+        has_symbol = any(not ch.isalnum() for ch in candidate)
+        if has_upper and has_lower and has_digit and has_symbol:
+            return candidate
+
+
+def clear_email_verification_context():
+    """Remove temporary verification-link preview data from session."""
+    session.pop(EMAIL_CONTEXT_SESSION_KEY, None)
+
+
+def set_email_verification_context(context):
+    """Store verification-link UI context for fallback/display flows."""
+    session[EMAIL_CONTEXT_SESSION_KEY] = context
+    session.modified = True
+
+
+def get_email_verification_context():
+    context = session.get(EMAIL_CONTEXT_SESSION_KEY)
+    if isinstance(context, dict):
+        return context
+    return None
+
+
+def should_mock_email_delivery():
+    """
+    Determine if outbound email should run in mock mode.
+    Mock mode is enabled when explicitly configured or when SMTP creds are missing.
+    """
+    if app.config.get("EMAIL_MOCK_MODE"):
+        return True
+    if app.config.get("MAIL_SUPPRESS_SEND"):
+        return True
+    smtp_username = clean_text(app.config.get("MAIL_USERNAME"))
+    smtp_password = clean_text(app.config.get("MAIL_PASSWORD"))
+    return not smtp_username or not smtp_password
+
+
+def send_system_email(subject, recipients, text_body, html_template=None, **context):
+    """
+    Centralized Flask-Mail sender used by verification + announcement emails.
+    Returns a tuple: (delivery_mode, error_message).
+    delivery_mode in {"smtp", "mock"}.
+    """
+    cleaned_recipients = [clean_text(email).lower() for email in (recipients or []) if clean_text(email)]
+    if not cleaned_recipients:
+        return "mock", "No recipient email address was provided."
+
+    if should_mock_email_delivery():
+        # Safe mock path for local/dev environments without SMTP credentials.
+        print(f"[MOCK EMAIL] subject={subject} recipients={cleaned_recipients}\n{text_body}\n")
+        return "mock", None
+
+    try:
+        message = Message(
+            subject=subject,
+            recipients=cleaned_recipients,
+            body=text_body,
+            sender=clean_text(app.config.get("MAIL_FROM")) or clean_text(app.config.get("MAIL_USERNAME")),
+        )
+        if html_template:
+            message.html = render_template(html_template, **context)
+        mail.send(message)
+        return "smtp", None
+    except Exception:
+        return "mock", "Unable to send email right now."
+
+
+def build_email_verification_link(token):
+    return url_for("verify_email", token=token, _external=True)
+
+
+def invalidate_email_verification_tokens(user_id):
+    """
+    Mark all active verification tokens as used before issuing a new one.
+    This prevents token accumulation and keeps only the newest link valid.
+    """
+    now = datetime.utcnow()
+    EmailVerificationToken.query.filter(
+        EmailVerificationToken.user_id == user_id,
+        EmailVerificationToken.used.is_(False),
+    ).update(
+        {
+            "used": True,
+            "used_at": now,
+        },
+        synchronize_session=False,
+    )
+
+
+def issue_email_verification_token(user):
+    """
+    Create a fresh email verification token record for a user.
+    The caller commits the session.
+    """
+    invalidate_email_verification_tokens(user.id)
+    expiry_hours = max(1, int(app.config.get("EMAIL_VERIFICATION_EXPIRY_HOURS", 24)))
+    token_record = EmailVerificationToken(
+        user_id=user.id,
+        token=secrets.token_urlsafe(32),
+        expires_at=datetime.utcnow() + timedelta(hours=expiry_hours),
+        used=False,
+    )
+    db.session.add(token_record)
+    return token_record
+
+
+def send_email_verification_link(user, token_record, role_slug="alumni"):
+    """
+    Deliver the verification link via SMTP when possible.
+    For school/alumni domains, we keep compatibility with existing no-SMTP behavior
+    and expose the link in UI/session fallback.
+    """
+    verify_link = build_email_verification_link(token_record.token)
+    role_name = ROLE_PORTALS.get(role_slug, ROLE_PORTALS["alumni"]).get("label", "Alumni")
+    subject = "Verify Your WVSU Portal Email"
+    text_body = (
+        f"Hello,\n\n"
+        f"Please verify your email address for the WVSU {role_name} Portal.\n\n"
+        f"Verification link: {verify_link}\n\n"
+        f"This link will expire on {token_record.expires_at.strftime('%Y-%m-%d %H:%M:%S')} UTC.\n"
+        f"If you did not request this, you may ignore this email.\n\n"
+        f"Regards,\nWVSU Alumni Tracking System"
+    )
+
+    # Preserve existing school-domain behavior by showing verification link in UI.
+    if is_school_or_alumni_email(user.email):
+        set_email_verification_context(
+            {
+                "email": user.email,
+                "link": verify_link,
+                "expires_at": token_record.expires_at.isoformat(),
+                "delivery": "ui",
+            }
+        )
+        return "ui", None
+
+    delivery_mode, error_message = send_system_email(
+        subject=subject,
+        recipients=[user.email],
+        text_body=text_body,
+        html_template="emails/email_verification.html",
+        verify_link=verify_link,
+        user=user,
+        expires_at=token_record.expires_at,
+        role_name=role_name,
+    )
+
+    if delivery_mode == "mock":
+        # Keep a safe fallback path so verification can continue in development.
+        set_email_verification_context(
+            {
+                "email": user.email,
+                "link": verify_link,
+                "expires_at": token_record.expires_at.isoformat(),
+                "delivery": "mock",
+            }
+        )
+    else:
+        clear_email_verification_context()
+    return delivery_mode, error_message
+
+
+def get_notification_recipients():
+    """
+    Target active, verified alumni accounts for platform notifications.
+    """
+    query = User.query.filter(
+        User.role == UserRole.ALUMNI,
+        User.is_active.is_(True),
+        User.otp_verified.is_(True),
+    )
+    if app.config.get("EMAIL_VERIFICATION_REQUIRED", True):
+        query = query.filter(User.email_verified.is_(True))
+    return query.all()
+
+
+def create_bulk_notifications(users, title, message, notification_type=NOTIF_TYPE_SYSTEM):
+    if not users:
+        return 0
+    db.session.bulk_save_objects(
+        [
+            Notification(
+                user_id=user.id,
+                title=title,
+                message=message,
+                notification_type=notification_type,
+                is_read=False,
+            )
+            for user in users
+        ]
+    )
+    return len(users)
+
+
+def email_subject_for_job(job):
+    return f"New Job Opportunity: {job.title}"
+
+
+def email_subject_for_event(event_obj):
+    return f"New Event Announcement: {event_obj.title}"
+
+
+def send_job_notification_emails(users, job):
+    sent = 0
+    failed = 0
+    for user in users:
+        text_body = (
+            f"Hello,\n\n"
+            f"A new job opportunity was posted in the WVSU portal.\n\n"
+            f"Title: {job.title}\n"
+            f"Company: {job.company}\n"
+            f"Location: {job.location or 'N/A'}\n\n"
+            f"View jobs here: {url_for('jobs', _external=True)}\n\n"
+            f"Regards,\nWVSU Alumni Tracking System"
+        )
+        delivery_mode, error_message = send_system_email(
+            subject=email_subject_for_job(job),
+            recipients=[user.email],
+            text_body=text_body,
+            html_template="emails/new_job_notification.html",
+            user=user,
+            job=job,
+            jobs_url=url_for("jobs", _external=True),
+        )
+        if delivery_mode == "smtp" and not error_message:
+            sent += 1
+        else:
+            failed += 1
+    return sent, failed
+
+
+def send_event_notification_emails(users, event_obj):
+    sent = 0
+    failed = 0
+    for user in users:
+        text_body = (
+            f"Hello,\n\n"
+            f"A new event was published in the WVSU portal.\n\n"
+            f"Title: {event_obj.title}\n"
+            f"Date: {event_obj.event_date.strftime('%Y-%m-%d %H:%M') if event_obj.event_date else 'TBA'}\n"
+            f"Location: {event_obj.location or 'N/A'}\n\n"
+            f"View events here: {url_for('events', _external=True)}\n\n"
+            f"Regards,\nWVSU Alumni Tracking System"
+        )
+        delivery_mode, error_message = send_system_email(
+            subject=email_subject_for_event(event_obj),
+            recipients=[user.email],
+            text_body=text_body,
+            html_template="emails/new_event_notification.html",
+            user=user,
+            event=event_obj,
+            events_url=url_for("events", _external=True),
+        )
+        if delivery_mode == "smtp" and not error_message:
+            sent += 1
+        else:
+            failed += 1
+    return sent, failed
+
+
+def dispatch_job_notifications(job):
+    users = get_notification_recipients()
+    title = "New job opportunity posted"
+    message = f"{job.title} at {job.company} is now available."
+    created_count = create_bulk_notifications(users, title, message, notification_type=NOTIF_TYPE_JOB)
+    if not safe_commit("Job was created but notifications could not be saved."):
+        return {"created": 0, "email_sent": 0, "email_failed": len(users)}
+
+    if not app.config.get("EMAIL_NOTIFICATION_ENABLED", True):
+        return {"created": created_count, "email_sent": 0, "email_failed": 0}
+
+    sent, failed = send_job_notification_emails(users, job)
+    return {"created": created_count, "email_sent": sent, "email_failed": failed}
+
+
+def dispatch_event_notifications(event_obj):
+    users = get_notification_recipients()
+    title = "New event announced"
+    message = f"{event_obj.title} has been posted. RSVP is now open."
+    created_count = create_bulk_notifications(users, title, message, notification_type=NOTIF_TYPE_EVENT)
+    if not safe_commit("Event was created but notifications could not be saved."):
+        return {"created": 0, "email_sent": 0, "email_failed": len(users)}
+
+    if not app.config.get("EMAIL_NOTIFICATION_ENABLED", True):
+        return {"created": created_count, "email_sent": 0, "email_failed": 0}
+
+    sent, failed = send_event_notification_emails(users, event_obj)
+    return {"created": created_count, "email_sent": sent, "email_failed": failed}
+
+
 def get_auth_template_context(role_slug):
     return {
         "role_slug": role_slug,
@@ -1025,6 +1385,7 @@ def get_auth_template_context(role_slug):
         "portal_login_url": role_login_url(role_slug),
         "portal_register_url": role_register_url(role_slug),
         "otp_expiry_seconds": app.config["OTP_EXPIRY_SECONDS"],
+        "email_verification_required": app.config.get("EMAIL_VERIFICATION_REQUIRED", True),
         "year_options": range(datetime.utcnow().year + 1, 1969, -1),
         "degree_options": degree_options_for(),
     }
@@ -1150,6 +1511,9 @@ def handle_portal_registration(role_slug):
         user = User(email=email, role=to_role_enum(role_slug))
         user.set_password(password)
         user.otp_verified = False
+        # New registrations must pass link verification when enabled.
+        user.email_verified = not app.config.get("EMAIL_VERIFICATION_REQUIRED", True)
+        user.email_verified_at = datetime.utcnow() if user.email_verified else None
         user.is_active = False
         set_user_approval_defaults(user, role_slug)
 
@@ -1234,6 +1598,41 @@ def handle_portal_login(role_slug):
             )
             return redirect(role_login_url(user_role))
 
+        if app.config.get("EMAIL_VERIFICATION_REQUIRED", True) and not bool(
+            getattr(user, "email_verified", True)
+        ):
+            token_record = issue_email_verification_token(user)
+            delivery_mode, delivery_error = send_email_verification_link(
+                user,
+                token_record,
+                role_slug=user_role,
+            )
+            if not safe_commit("Unable to create verification link right now."):
+                return render_template(template_name, **template_context)
+
+            if delivery_mode in {"ui", "mock"}:
+                flash(
+                    "Email verification link generated. Use the on-screen verification link to activate your account.",
+                    "warning",
+                )
+            elif delivery_error:
+                flash(
+                    "Verification link created, but email delivery failed. Use the on-screen verification link for now.",
+                    "warning",
+                )
+            else:
+                flash(
+                    "Please verify your email address first. A verification link was sent to your inbox.",
+                    "warning",
+                )
+            return redirect(
+                url_for(
+                    "verification_pending",
+                    email=user.email,
+                    role=user_role,
+                )
+            )
+
         if role_requires_approval(user_role):
             approval_status = user_approval_status(user)
             if approval_status == APPROVAL_PENDING and user.otp_verified:
@@ -1309,6 +1708,10 @@ def seed_users():
             user = User(email=email, role=role)
             user.set_password(password)
             user.otp_verified = True
+            user.email_verified = True
+            user.email_verified_at = datetime.utcnow()
+            user.must_change_password = False
+            user.temporary_password_issued_at = None
             user.approval_status = APPROVAL_APPROVED
             user.approval_requested_at = datetime.utcnow()
             user.approved_at = datetime.utcnow()
@@ -1322,6 +1725,10 @@ def seed_users():
                 role_str = str(role).lower().strip()
                 user.role = UserRole[role_str.upper()] if hasattr(UserRole, role_str.upper()) else UserRole.ALUMNI
             user.otp_verified = True
+            user.email_verified = True
+            user.email_verified_at = datetime.utcnow()
+            user.must_change_password = False
+            user.temporary_password_issued_at = None
             user.approval_status = APPROVAL_APPROVED
             user.approved_at = datetime.utcnow()
             user.is_active = True
@@ -1379,6 +1786,16 @@ def ensure_user_approval_integrity():
             user.approval_requested_at = user.created_at or datetime.utcnow()
             changed = True
 
+        if getattr(user, "email_verified", None) is None:
+            user.email_verified = bool(getattr(user, "otp_verified", False))
+            changed = True
+        if user.email_verified and not getattr(user, "email_verified_at", None):
+            user.email_verified_at = user.created_at or datetime.utcnow()
+            changed = True
+        if getattr(user, "must_change_password", None) is None:
+            user.must_change_password = False
+            changed = True
+
         if status == APPROVAL_APPROVED and not user.approved_at:
             user.approved_at = datetime.utcnow()
             changed = True
@@ -1430,6 +1847,10 @@ def ensure_sqlite_schema():
                         "otp_code_hash": "TEXT",
                         "otp_verified": "INTEGER DEFAULT 0",
                         "is_active": "INTEGER DEFAULT 0",
+                        "email_verified": "INTEGER DEFAULT 1",
+                        "email_verified_at": "DATETIME",
+                        "must_change_password": "INTEGER DEFAULT 0",
+                        "temporary_password_issued_at": "DATETIME",
                         "approval_status": "TEXT DEFAULT 'approved'",
                         "approval_requested_at": "DATETIME",
                         "approved_at": "DATETIME",
@@ -1485,6 +1906,46 @@ def ensure_sqlite_schema():
                     },
                 )
 
+                if not table_exists("email_verification_token"):
+                    cursor.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS email_verification_token (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            token VARCHAR(128) NOT NULL UNIQUE,
+                            expires_at DATETIME NOT NULL,
+                            used INTEGER NOT NULL DEFAULT 0,
+                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            used_at DATETIME,
+                            FOREIGN KEY (user_id) REFERENCES user(id)
+                        )
+                        """
+                    )
+                else:
+                    add_missing_columns(
+                        "email_verification_token",
+                        {
+                            "user_id": "INTEGER",
+                            "token": "VARCHAR(128)",
+                            "expires_at": "DATETIME",
+                            "used": "INTEGER DEFAULT 0",
+                            "created_at": "DATETIME",
+                            "used_at": "DATETIME",
+                        },
+                    )
+
+                add_missing_columns(
+                    "notification",
+                    {
+                        "user_id": "INTEGER",
+                        "title": "TEXT",
+                        "message": "TEXT",
+                        "notification_type": "TEXT",
+                        "is_read": "INTEGER DEFAULT 0",
+                        "created_at": "DATETIME",
+                    },
+                )
+
                 if created_rsvps_table and table_exists("event_rsvp"):
                     cursor.execute(
                         """
@@ -1526,6 +1987,27 @@ def ensure_sqlite_schema():
                 )
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS ix_rsvps_user_id ON rsvps(user_id)"
+                )
+                cursor.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_email_verification_token_token ON email_verification_token(token)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_email_verification_token_user_id ON email_verification_token(user_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_notification_user_id ON notification(user_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_notification_is_read ON notification(is_read)"
+                )
+                cursor.execute(
+                    "UPDATE user SET email_verified = COALESCE(email_verified, 1)"
+                )
+                cursor.execute(
+                    "UPDATE user SET email_verified_at = COALESCE(email_verified_at, created_at, CURRENT_TIMESTAMP) WHERE email_verified = 1"
+                )
+                cursor.execute(
+                    "UPDATE user SET must_change_password = COALESCE(must_change_password, 0)"
                 )
                 conn.commit()
             finally:
@@ -1723,6 +2205,19 @@ def verify_otp():
         if purpose == OTP_PURPOSE_REGISTRATION:
             user.otp_verified = True
             user.otp_code_hash = None
+            verification_pending = False
+            verification_delivery_mode = None
+            verification_delivery_error = None
+            if app.config.get("EMAIL_VERIFICATION_REQUIRED", True) and not bool(
+                getattr(user, "email_verified", True)
+            ):
+                verification_pending = True
+                token_record = issue_email_verification_token(user)
+                verification_delivery_mode, verification_delivery_error = send_email_verification_link(
+                    user,
+                    token_record,
+                    role_slug=role_slug,
+                )
             sync_user_activation_state(user)
             if not safe_commit("Unable to verify OTP right now."):
                 return redirect(
@@ -1735,6 +2230,30 @@ def verify_otp():
                 )
 
             clear_otp_context()
+            if verification_pending:
+                if verification_delivery_mode in {"ui", "mock"}:
+                    flash(
+                        "OTP verified. Complete email verification using the on-screen verification link.",
+                        "warning",
+                    )
+                elif verification_delivery_error:
+                    flash(
+                        "OTP verified. Verification link created but email delivery failed, use the on-screen fallback link.",
+                        "warning",
+                    )
+                else:
+                    flash(
+                        "OTP verified. A verification link was sent to your email. Please verify before signing in.",
+                        "warning",
+                    )
+                return redirect(
+                    url_for(
+                        "verification_pending",
+                        email=email,
+                        role=role_slug,
+                    )
+                )
+
             if role_requires_approval(role_slug):
                 approval_status = user_approval_status(user)
                 if approval_status == APPROVAL_PENDING:
@@ -1770,6 +2289,37 @@ def verify_otp():
                 )
                 return redirect(role_login_url(role_slug))
 
+        if app.config.get("EMAIL_VERIFICATION_REQUIRED", True) and not bool(
+            getattr(user, "email_verified", True)
+        ):
+            token_record = issue_email_verification_token(user)
+            delivery_mode, delivery_error = send_email_verification_link(
+                user,
+                token_record,
+                role_slug=role_slug,
+            )
+            if not safe_commit("Unable to generate verification link right now."):
+                clear_otp_context()
+                return redirect(role_login_url(role_slug))
+            clear_otp_context()
+            if delivery_mode in {"ui", "mock"} or delivery_error:
+                flash(
+                    "Please verify your email first using the available verification link.",
+                    "warning",
+                )
+            else:
+                flash(
+                    "Please verify your email first. A verification link has been sent.",
+                    "warning",
+                )
+            return redirect(
+                url_for(
+                    "verification_pending",
+                    email=user.email,
+                    role=role_slug,
+                )
+            )
+
         sync_user_activation_state(user)
         if not user.is_active:
             clear_otp_context()
@@ -1787,6 +2337,12 @@ def verify_otp():
 
         clear_otp_context()
         next_page = session.pop(POST_LOGIN_NEXT_KEY, None)
+        if bool(getattr(user, "must_change_password", False)):
+            flash(
+                "You are using a temporary password. Please set a new password to continue.",
+                "warning",
+            )
+            return redirect(url_for("reset_password_dashboard", role=role_slug, forced=1))
         flash("Sign in successful.", "success")
         if next_page and next_page.startswith("/"):
             return redirect(next_page)
@@ -1910,6 +2466,17 @@ def resend_otp():
 
     if purpose == OTP_PURPOSE_REGISTRATION and user.otp_verified:
         clear_otp_context()
+        if app.config.get("EMAIL_VERIFICATION_REQUIRED", True) and not bool(
+            getattr(user, "email_verified", True)
+        ):
+            flash("OTP is already verified. Please complete email verification.", "warning")
+            return redirect(
+                url_for(
+                    "verification_pending",
+                    email=user.email,
+                    role=role_slug,
+                )
+            )
         flash("Account already verified. Please sign in.", "info")
         return redirect(role_login_url(role_slug))
 
@@ -1972,12 +2539,225 @@ def resend_otp():
     )
 
 
+@app.route("/verification-pending")
+def verification_pending():
+    blocked = block_switch_account()
+    if blocked:
+        return blocked
+
+    email = clean_text(request.args.get("email")).lower()
+    role_slug = to_role_slug(request.args.get("role"), default="alumni")
+    if not email:
+        flash("Verification context is missing. Please register or log in again.", "warning")
+        return redirect(role_login_url(role_slug))
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        flash("Account not found. Please register again.", "danger")
+        return redirect(role_register_url(role_slug))
+
+    account_role = to_role_slug(user.role, default="alumni")
+    if account_role != role_slug:
+        role_slug = account_role
+
+    if user.email_verified:
+        flash("Email already verified. You can sign in now.", "success")
+        return redirect(role_login_url(role_slug))
+
+    verification_context = get_email_verification_context() or {}
+    preview_link = (
+        verification_context.get("link")
+        if verification_context.get("email", "").lower() == user.email.lower()
+        else None
+    )
+    delivery_mode = (
+        verification_context.get("delivery")
+        if verification_context.get("email", "").lower() == user.email.lower()
+        else None
+    )
+    expires_at = verification_context.get("expires_at")
+
+    return render_template(
+        "verification_pending.html",
+        email=user.email,
+        role_slug=role_slug,
+        role_label=role_label(role_slug),
+        preview_link=preview_link,
+        delivery_mode=delivery_mode,
+        expires_at=expires_at,
+        login_url=role_login_url(role_slug),
+        register_url=role_register_url(role_slug),
+    )
+
+
+@app.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    blocked = block_switch_account()
+    if blocked:
+        return blocked
+
+    email = clean_text(request.form.get("email")).lower()
+    role_slug = to_role_slug(request.form.get("role"), default="alumni")
+    if not email:
+        flash("Email is required.", "danger")
+        return redirect(role_login_url(role_slug))
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        flash("Account not found.", "danger")
+        return redirect(role_register_url(role_slug))
+
+    account_role = to_role_slug(user.role, default="alumni")
+    if role_slug != account_role:
+        role_slug = account_role
+
+    if user.email_verified:
+        flash("Email already verified. Please sign in.", "success")
+        return redirect(role_login_url(role_slug))
+
+    token_record = issue_email_verification_token(user)
+    delivery_mode, delivery_error = send_email_verification_link(
+        user,
+        token_record,
+        role_slug=role_slug,
+    )
+    if not safe_commit("Unable to resend verification link right now."):
+        return redirect(
+            url_for(
+                "verification_pending",
+                email=user.email,
+                role=role_slug,
+            )
+        )
+
+    if delivery_mode in {"ui", "mock"}:
+        flash("Verification link regenerated and displayed on screen.", "warning")
+    elif delivery_error:
+        flash("Verification link regenerated, but email delivery failed. Use the on-screen fallback link.", "warning")
+    else:
+        flash("Verification link sent. Please check your email.", "success")
+    return redirect(
+        url_for(
+            "verification_pending",
+            email=user.email,
+            role=role_slug,
+        )
+    )
+
+
+@app.route("/verify-email/<token>")
+def verify_email(token):
+    token_value = clean_text(token)
+    if not token_value:
+        flash("Invalid verification token.", "danger")
+        return redirect(url_for("index"))
+
+    token_record = EmailVerificationToken.query.filter_by(token=token_value).first()
+    if not token_record:
+        flash("Verification link is invalid.", "danger")
+        return redirect(url_for("index"))
+
+    user = db.session.get(User, token_record.user_id)
+    if not user:
+        flash("Account not found for this verification link.", "danger")
+        return redirect(url_for("index"))
+
+    role_slug = to_role_slug(user.role, default="alumni")
+    if token_record.used:
+        if user.email_verified:
+            flash("Email already verified. Please sign in.", "success")
+            return redirect(role_login_url(role_slug))
+        flash("Verification link was already used. Please request a new one.", "warning")
+        return redirect(
+            url_for(
+                "verification_pending",
+                email=user.email,
+                role=role_slug,
+            )
+        )
+
+    if token_record.is_expired():
+        token_record.used = True
+        token_record.used_at = datetime.utcnow()
+        safe_commit("Verification link expired. Please request a new one.")
+        flash("Verification link has expired. Please request a new one.", "warning")
+        return redirect(
+            url_for(
+                "verification_pending",
+                email=user.email,
+                role=role_slug,
+            )
+        )
+
+    user.email_verified = True
+    user.email_verified_at = datetime.utcnow()
+    token_record.used = True
+    token_record.used_at = datetime.utcnow()
+    sync_user_activation_state(user)
+
+    if not safe_commit("Unable to verify your email right now."):
+        return redirect(
+            url_for(
+                "verification_pending",
+                email=user.email,
+                role=role_slug,
+            )
+        )
+
+    clear_email_verification_context()
+    flash("Email verification successful. You can now sign in.", "success")
+    return redirect(role_login_url(role_slug))
+
+
+@app.route("/notifications")
+@login_required
+def notifications():
+    show_unread_only = request.args.get("unread", "0") in {"1", "true", "yes", "on"}
+    query = Notification.query.filter_by(user_id=current_user.id)
+    if show_unread_only:
+        query = query.filter(Notification.is_read.is_(False))
+    notifications_list = query.order_by(Notification.created_at.desc()).all()
+    unread_count = (
+        Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+    )
+    return render_template(
+        "notifications.html",
+        notifications=notifications_list,
+        unread_count=unread_count,
+        show_unread_only=show_unread_only,
+    )
+
+
+@app.route("/notifications/<int:notification_id>/read", methods=["POST"])
+@login_required
+def mark_notification_read(notification_id):
+    notification = Notification.query.filter_by(
+        id=notification_id,
+        user_id=current_user.id,
+    ).first_or_404()
+    notification.is_read = True
+    safe_commit("Unable to update this notification.")
+    return redirect(url_for("notifications"))
+
+
+@app.route("/notifications/read-all", methods=["POST"])
+@login_required
+def mark_all_notifications_read():
+    Notification.query.filter_by(user_id=current_user.id, is_read=False).update(
+        {"is_read": True},
+        synchronize_session=False,
+    )
+    safe_commit("Unable to mark notifications as read.")
+    return redirect(url_for("notifications"))
+
+
 @app.route("/logout")
 @login_required
 def logout():
     logout_user()
     clear_active_session()
     clear_otp_context()
+    clear_email_verification_context()
     flash("You have been logged out.", "success")
     return redirect(url_for("index"))
 
@@ -2041,6 +2821,7 @@ def admin():
         .limit(5)
         .all()
     )
+    recent_activity = db.session.query(SystemLog).outerjoin(User).order_by(SystemLog.timestamp.desc()).limit(10).all()
     return render_template(
         "admin.html",
         total_users=total_users,
@@ -2049,7 +2830,28 @@ def admin():
         total_jobs=total_jobs,
         recent_alumni=recent_alumni,
         recent_surveys=recent_surveys,
+        recent_activity=recent_activity,
     )
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["GET", "POST"])
+@role_required("admin")
+def admin_delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if current_user.id == user_id:
+        flash("Cannot delete your own account.", "danger")
+        return redirect(url_for("admin_password_management"))
+    
+    if request.method == "POST":
+        profile = user.profile
+        if profile:
+            db.session.delete(profile)
+        db.session.delete(user)
+        if safe_commit("Unable to delete user."):
+            flash(f"User {user.email} (ID #{user.id}) deleted permanently.", "success")
+        return redirect(url_for("admin_password_management"))
+    
+    return render_template("admin_delete_user_confirm.html", target_user=user)
 
 
 @app.route("/analytics")
@@ -3199,6 +4001,107 @@ def admin_delete_survey(survey_id):
     return redirect(url_for("admin_surveys"))
 
 
+@app.route("/admin/exports")
+@role_required("admin", "osa")
+def admin_exports():
+    return render_template(
+        "admin_exports.html",
+        role_slug=to_role_slug(current_user.role, default="alumni"),
+    )
+
+
+@app.route("/admin/password-management")
+@role_required("admin")
+def admin_password_management():
+    search = clean_text(request.args.get("search")).lower()
+    query = User.query
+    if search:
+        like = f"%{search}%"
+        query = query.filter(User.email.ilike(like))
+    users = query.order_by(User.created_at.desc()).all()
+    return render_template(
+        "admin_password_management.html",
+        users=users,
+        search=search,
+    )
+
+
+@app.route("/admin/users/<int:user_id>/reset-password", methods=["GET", "POST"])
+@role_required("admin")
+def admin_reset_user_password(user_id):
+    user = User.query.get_or_404(user_id)
+    generated_password = None
+
+    if request.method == "POST":
+        provided_password = clean_text(request.form.get("temporary_password"))
+        auto_generate = request.form.get("auto_generate") == "1" or not provided_password
+        temporary_password = (
+            generate_temporary_password()
+            if auto_generate
+            else provided_password
+        )
+
+        if len(temporary_password) < 8:
+            flash("Temporary password must be at least 8 characters long.", "danger")
+            return render_template(
+                "admin_reset_user_password.html",
+                target_user=user,
+                generated_password=None,
+            )
+
+        user.set_password(temporary_password)
+        user.must_change_password = True
+        user.temporary_password_issued_at = datetime.utcnow()
+        user.is_active = True
+        if not safe_commit("Unable to reset this account password right now."):
+            return render_template(
+                "admin_reset_user_password.html",
+                target_user=user,
+                generated_password=None,
+            )
+
+        send_email = request.form.get("send_email") == "1"
+        if send_email and is_valid_email(user.email):
+            role_slug = to_role_slug(user.role, default="alumni")
+            role_name = role_label(role_slug)
+            login_link = url_for("role_login", role=role_slug, _external=True)
+            text_body = (
+                f"Hello,\n\n"
+                f"An administrator reset your password for the WVSU {role_name} Portal.\n\n"
+                f"Temporary password: {temporary_password}\n"
+                f"Login page: {login_link}\n\n"
+                f"You are required to change this password immediately after login.\n\n"
+                f"Regards,\nWVSU Alumni Tracking System"
+            )
+            delivery_mode, delivery_error = send_system_email(
+                subject="Temporary Password Issued",
+                recipients=[user.email],
+                text_body=text_body,
+                html_template=None,
+            )
+            if delivery_mode == "smtp" and not delivery_error:
+                flash("Temporary password emailed to the user.", "success")
+            else:
+                flash("Email delivery unavailable. Provide the temporary password manually.", "warning")
+
+        generated_password = temporary_password
+        flash(
+            "Password reset complete. User is now required to change password on next login.",
+            "success",
+        )
+        return render_template(
+            "admin_reset_user_password.html",
+            target_user=user,
+            generated_password=generated_password,
+        )
+
+    return render_template(
+        "admin_reset_user_password.html",
+        target_user=user,
+        generated_password=generated_password,
+    )
+
+
 @app.route("/admin/jobs")
 @role_required("admin")
 def admin_jobs():
@@ -3229,8 +4132,19 @@ def admin_add_job():
             is_active=True,
         )
         db.session.add(job)
-        db.session.commit()
-        flash("Job created.", "success")
+        if not safe_commit("Unable to create job right now."):
+            return render_template("admin_edit_job.html", job=None)
+
+        dispatch_result = dispatch_job_notifications(job)
+        flash(
+            f"Job created. {dispatch_result['created']} in-app notification(s) queued.",
+            "success",
+        )
+        if dispatch_result["email_failed"] > 0 and dispatch_result["email_sent"] == 0:
+            flash(
+                "Notification emails were queued in fallback mode (SMTP unavailable).",
+                "warning",
+            )
         return redirect(url_for("admin_jobs"))
     return render_template("admin_edit_job.html", job=None)
 
@@ -3321,8 +4235,19 @@ def admin_add_event():
             is_published=True,
         )
         db.session.add(event)
-        db.session.commit()
-        flash("Event created.", "success")
+        if not safe_commit("Unable to create event right now."):
+            return render_template("admin_edit_event.html", event=None)
+
+        dispatch_result = dispatch_event_notifications(event)
+        flash(
+            f"Event created. {dispatch_result['created']} in-app notification(s) queued.",
+            "success",
+        )
+        if dispatch_result["email_failed"] > 0 and dispatch_result["email_sent"] == 0:
+            flash(
+                "Notification emails were queued in fallback mode (SMTP unavailable).",
+                "warning",
+            )
         return redirect(url_for("admin_events"))
     return render_template("admin_edit_event.html", event=None)
 
@@ -3383,12 +4308,106 @@ def forgot_password():
             db.session.add(reset_record)
             db.session.commit()
             reset_link = url_for("reset_password", token=token, _external=True)
-            print(f"Password reset link for {email}: {reset_link}")
-            return render_template("forgot_password.html", reset_link=reset_link, success_message="Reset link generated!")
+            text_body = (
+                f"Hello,\n\n"
+                f"We received a password reset request for your WVSU portal account.\n\n"
+                f"Reset link: {reset_link}\n\n"
+                f"This link expires in 1 hour.\n"
+                f"If you did not request this, please ignore this email.\n\n"
+                f"Regards,\nWVSU Alumni Tracking System"
+            )
+            delivery_mode, delivery_error = send_system_email(
+                subject="WVSU Password Reset Link",
+                recipients=[email],
+                text_body=text_body,
+                html_template="emails/password_reset.html",
+                reset_link=reset_link,
+                user=user,
+                expires_hours=1,
+            )
+            if delivery_mode == "smtp" and not delivery_error:
+                flash("Password reset link sent to your email.", "success")
+                return render_template("forgot_password.html", success_message="Reset link sent. Please check your email.")
+
+            # Mock/fallback branch keeps recovery functional in non-SMTP environments.
+            print(f"[PASSWORD RESET FALLBACK] {email} -> {reset_link}")
+            return render_template(
+                "forgot_password.html",
+                reset_link=reset_link,
+                success_message="Reset link generated. Use the link below.",
+            )
         
         flash("Email not found.", "warning")
     
     return render_template("forgot_password.html")
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password_dashboard():
+    """
+    Direct reset dashboard for users who cannot use email-based reset.
+    Security model:
+    - Requires an authenticated session (identity already established via normal login flow).
+    - Only changes the currently signed-in user's password.
+    """
+    requested_role = to_role_slug(request.args.get("role"), default="alumni")
+    if not current_user.is_authenticated:
+        return redirect(role_login_url(requested_role))
+
+    role_slug = to_role_slug(current_user.role, default="alumni")
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not password or not confirm_password:
+            flash("Both password fields are required.", "danger")
+            return render_template(
+                "reset_password_dashboard.html",
+                role_slug=role_slug,
+                account_email=current_user.email,
+            )
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return render_template(
+                "reset_password_dashboard.html",
+                role_slug=role_slug,
+                account_email=current_user.email,
+            )
+
+        if len(password) < 8:
+            flash("Password must be at least 8 characters long.", "danger")
+            return render_template(
+                "reset_password_dashboard.html",
+                role_slug=role_slug,
+                account_email=current_user.email,
+            )
+
+        current_user.set_password(password)
+        current_user.is_active = True
+        current_user.must_change_password = False
+        current_user.temporary_password_issued_at = None
+        if not safe_commit("Unable to reset password right now."):
+            return render_template(
+                "reset_password_dashboard.html",
+                role_slug=role_slug,
+                account_email=current_user.email,
+            )
+
+        # Force re-login after password update for session safety.
+        logout_user()
+        clear_active_session()
+        clear_otp_context()
+        clear_email_verification_context()
+        flash("Password reset successfully. Please sign in with your new password.", "success")
+        return redirect(role_login_url(role_slug))
+
+    return render_template(
+        "reset_password_dashboard.html",
+        role_slug=role_slug,
+        account_email=current_user.email,
+    )
 
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
@@ -3413,12 +4432,56 @@ def reset_password(token):
 
         target_user.set_password(password)
         target_user.is_active = True
+        target_user.must_change_password = False
+        target_user.temporary_password_issued_at = None
         reset_record.used = True
         db.session.commit()
         flash("Password reset successfully. Please login.", "success")
         return redirect(role_login_url(target_role))
 
     return render_template("reset_password.html", token=token, role_slug=target_role)
+
+
+@app.route("/admin/users/bulk-delete", methods=["POST"])
+@role_required("admin")
+def admin_bulk_delete_users():
+    selected_ids = request.form.getlist("selected_ids")
+
+    if not selected_ids:
+        flash("No users selected.", "warning")
+        return redirect(url_for("admin_password_management"))
+
+    ids = []
+    for id_str in selected_ids:
+        try:
+            id_int = int(id_str)
+            # Protect admin self-delete.
+            if id_int != current_user.id:
+                ids.append(id_int)
+        except ValueError:
+            continue
+
+    if not ids:
+        flash("No valid, deletable users selected.", "warning")
+        return redirect(url_for("admin_password_management"))
+
+    deletable_count = 0
+    for user_id in ids:
+        user = db.session.get(User, user_id)
+        # Keep this safe: bulk-delete only alumni accounts.
+        if user and to_role_slug(user.role) == "alumni":
+            profile = user.profile
+            if profile:
+                db.session.delete(profile)
+            db.session.delete(user)
+            deletable_count += 1
+
+    if safe_commit(f"Failed to delete {deletable_count} selected alumni accounts."):
+        flash(f"Successfully deleted {deletable_count} alumni accounts.", "success")
+    else:
+        flash("Some deletions failed safely.", "warning")
+
+    return redirect(url_for("admin_password_management"))
 
 
 @app.errorhandler(403)
@@ -3446,7 +4509,6 @@ def server_error(_error):
         500,
     )
 
-# ... all your other functions ...
 
 def init_app():
     with app.app_context():
@@ -3456,7 +4518,7 @@ def init_app():
         seed_users()
         ensure_user_approval_integrity()
 
+
 if __name__ == "__main__":
     init_app()
     app.run(debug=True, host="0.0.0.0", port=5000)
-

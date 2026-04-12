@@ -35,6 +35,11 @@
             } else {
                 root.removeAttribute("data-theme");
             }
+            // Backward-compatible dark mode class support.
+            root.classList.toggle("dark-mode", isDark);
+            if (document.body) {
+                document.body.classList.toggle("dark-mode", isDark);
+            }
 
             if (toggleButton) {
                 toggleButton.setAttribute("aria-pressed", isDark ? "true" : "false");

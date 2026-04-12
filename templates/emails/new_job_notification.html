@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Job Opportunity</title>
+</head>
+<body style="font-family: Arial, sans-serif; background: #f4f7fb; padding: 24px; color: #0f2746;">
+    <div style="max-width: 620px; margin: 0 auto; background: #ffffff; border: 1px solid #dce7f3; border-radius: 12px; padding: 24px;">
+        <h2 style="margin-top: 0; color: #00274d;">New Job Opportunity</h2>
+        <p>Hello {{ user.email }},</p>
+        <p>A new job opening has been posted:</p>
+        <ul style="line-height: 1.6;">
+            <li><strong>Title:</strong> {{ job.title }}</li>
+            <li><strong>Company:</strong> {{ job.company }}</li>
+            <li><strong>Location:</strong> {{ job.location or 'N/A' }}</li>
+            <li><strong>Type:</strong> {{ job.job_type or 'N/A' }}</li>
+        </ul>
+        <p style="margin: 20px 0;">
+            <a href="{{ jobs_url }}" style="display: inline-block; background: #003f7d; color: #ffffff; text-decoration: none; padding: 10px 16px; border-radius: 8px;">
+                View Job Board
+            </a>
+        </p>
+        <p style="margin-bottom: 0;">WVSU Alumni Tracking System</p>
+    </div>
+</body>
+</html>

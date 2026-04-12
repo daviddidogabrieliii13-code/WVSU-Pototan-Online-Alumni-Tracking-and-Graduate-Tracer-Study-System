@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Delete User {{ target_user.email }} - WVSU Alumni System{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    {% include 'admin_sidebar.html' %}
+
+    <div class="main-content">
+        <div class="dashboard-header">
+            <h1><i class="fas fa-user-times"></i> Confirm Delete User</h1>
+            <p class="text-muted">User #{{ target_user.id }}: {{ target_user.email }}</p>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Permanent deletion</strong> of {{ target_user.email }} (ID #{{ target_user.id }}).
+                    <br><small>This will also delete associated profile, surveys, RSVPs, logs, and notifications.</small>
+                </div>
+
+                <p><strong>Details:</strong></p>
+                <ul>
+                    <li><strong>Role:</strong> {{ target_user.role.value if target_user.role else 'alumni' | title }}</li>
+                    <li><strong>Status:</strong> {% if target_user.is_active %}Active{% else %}Inactive{% endif %}</li>
+                    <li>{% if target_user.profile %}Profile exists{% else %}<strong>No profile</strong>{% endif %}</li>
+                    <li>{% if target_user.profile and target_user.profile.surveys %}Has survey{% else %}No survey{% endif %}</li>
+                </ul>
+
+                {% if current_user.id == target_user.id %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-circle"></i> You cannot delete your own admin account.
+                    </div>
+                    <a href="{{ url_for('admin_password_management') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Cancel
+                    </a>
+                {% else %}
+                    <form method="POST" action="{{ url_for('admin_delete_user', user_id=target_user.id) }}" class="d-inline">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Delete {{ target_user.email }} permanently? This cannot be undone.');">
+                            <i class="fas fa-trash"></i> Delete User
+                        </button>
+                    </form>
+                    <a href="{{ url_for('admin_password_management') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Cancel
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

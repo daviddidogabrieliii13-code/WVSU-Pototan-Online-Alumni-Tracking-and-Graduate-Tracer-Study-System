@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Data Exports - WVSU Alumni System{% endblock %}
+
+{% block content %}
+<div class="container page-stack" style="padding-top: var(--space-xl);">
+    <section class="section-card">
+        <h1>Data Export Center</h1>
+        <p class="text-muted">Download records as CSV or JSON without modifying existing database data.</p>
+    </section>
+
+    <section class="portal-grid">
+        {% if role_slug == 'admin' %}
+        <article class="portal-card section-card">
+            <h3>Users Export</h3>
+            <p class="text-muted">Includes account role, status, verification flags, and profile snapshot.</p>
+            <div class="portal-card-actions">
+                <a class="btn btn-primary btn-sm" href="{{ url_for('exports.export_users_csv') }}">Download CSV</a>
+                <a class="btn btn-outline btn-sm" href="{{ url_for('exports.export_users_json') }}">Download JSON</a>
+            </div>
+        </article>
+
+        <article class="portal-card section-card">
+            <h3>Jobs Export</h3>
+            <p class="text-muted">Includes all job posting fields and activity status.</p>
+            <div class="portal-card-actions">
+                <a class="btn btn-primary btn-sm" href="{{ url_for('exports.export_jobs_csv') }}">Download CSV</a>
+                <a class="btn btn-outline btn-sm" href="{{ url_for('exports.export_jobs_json') }}">Download JSON</a>
+            </div>
+        </article>
+        {% endif %}
+
+        <article class="portal-card section-card">
+            <h3>Events Export</h3>
+            <p class="text-muted">Includes event schedule, organizer details, and publish state.</p>
+            <div class="portal-card-actions">
+                <a class="btn btn-primary btn-sm" href="{{ url_for('exports.export_events_csv') }}">Download CSV</a>
+                <a class="btn btn-outline btn-sm" href="{{ url_for('exports.export_events_json') }}">Download JSON</a>
+            </div>
+        </article>
+    </section>
+</div>
+{% endblock %}
