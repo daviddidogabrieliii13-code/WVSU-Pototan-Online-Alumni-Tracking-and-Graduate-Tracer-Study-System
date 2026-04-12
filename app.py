@@ -67,10 +67,21 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 os.makedirs(app.instance_path, exist_ok=True)
-db_path = os.path.join(app.instance_path, "database.db").replace("\\", "/")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL", f"sqlite:///{db_path}"
-)
+# Production-ready DB config for Render PostgreSQL + local SQLite
+db_url = os.environ.get("DATABASE_URL")
+if db_url:
+    # Render PostgreSQL: Fix postgres:// → postgresql://
+    uri = db_url.replace("postgres://", "postgresql://")
+    app.config["SQLALCHEMY_DATABASE_URI"] = uri
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "echo": False,  # Silence prod SQL logs
+    }
+else:
+    # Local SQLite with absolute path
+    db_path = os.path.abspath(os.path.join(app.instance_path, "database.db"))
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 upload_folder = os.path.join(app.root_path, "static", "uploads")
