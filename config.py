@@ -48,8 +48,13 @@ class Config:
     MAIL_PORT = int(os.environ.get('MAIL_PORT') or 587)
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'True').lower() in ['true', 'on', '1']
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME') or 'daviddidogabrieliii13@gmail.com'
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') or os.environ.get('GMAIL_APP_PASSWORD') or 'cfkxgjxmkaznrqaz'
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') or os.environ.get('GMAIL_APP_PASSWORD') or 'ebbjirqrwlzgetgd'
     MAIL_FROM = os.environ.get('MAIL_FROM') or MAIL_USERNAME
+    
+    # OTP: ON-SCREEN + Gmail
+    EMAIL_VERIFICATION_REQUIRED = False  # No email verification
+    SHOW_OTP_IN_UI = True               # OTP always on screen
+    EMAIL_NOTIFICATION_ENABLED = True   # Send OTP via Gmail
     
     # Admin emails
     ADMIN_EMAILS = ['admin@wvsu.edu.ph']
