@@ -12,9 +12,9 @@
     </div>
 </div>
 
-<div class="container" style="padding-bottom: var(--space-xxl);">
+<div class="container mb-xl">
     <!-- Search & Filters -->
-    <div class="job-filters" style="margin-bottom: var(--space-xl);">
+    <div class="job-filters mb-xl">
         <form method="GET" action="{{ url_for('alumni_directory') }}" class="filter-form">
             <input type="text" name="search" class="form-control" placeholder="Search by name, course, or company..." value="{{ search if search else '' }}">
             <select name="degree" class="form-control">

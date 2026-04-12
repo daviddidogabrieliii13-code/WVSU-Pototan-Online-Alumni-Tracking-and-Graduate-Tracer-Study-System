@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}No Gmail Access - Alumni Portal{% endblock %}
+
+{% block content %}
+<section class="auth-page" data-portal="alumni">
+    <div class="auth-container">
+        <article class="auth-card">
+            <header class="auth-header">
+                <div class="logo-icon auth-icon"><i class="fas fa-mobile-alt"></i></div>
+                <h1>No Gmail Access?</h1>
+                <p>Continue with on-screen OTP verification instead.</p>
+            </header>
+
+            <div class="auth-body">
+                <p class="text-center mb-4">We'll generate a temporary account and show you the OTP directly.</p>
+                
+                <form method="POST" action="" class="text-center">
+                    <div class="form-group mb-4">
+                        <input type="text" name="full_name" class="form-control text-center" placeholder="Enter your full name (for temp account)" required style="font-size: 1.2rem;">
+                        <small class="form-text text-muted">Temporary account - no email required</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        <i class="fas fa-magic"></i> Generate On-Screen OTP
+                    </button>
+                </form>
+                
+                <hr class="my-4">
+                
+                <p class="text-center">
+                    <a href="{{ portal_login_url }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Email Login
+                    </a>
+                </p>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}

@@ -12,9 +12,9 @@
     </div>
 </div>
 
-<div class="container" style="padding-bottom: var(--space-xxl);">
+<div class="container mb-xl">
     <!-- Stats Cards -->
-    <div class="analytics-grid" style="margin-bottom: var(--space-xl);">
+    <div class="analytics-grid mb-xl">
         <div class="stat-card">
             <div class="stat-card-icon primary">
                 <i class="fas fa-users"></i>
@@ -49,11 +49,11 @@
     </div>
 
     <!-- Recent Alumni -->
-    <div class="card" style="margin-bottom: var(--space-xl);">
+    <div class="card mb-xl">
         <div class="card-header">
             <h3><i class="fas fa-user-plus"></i> Recent Alumni Registrations</h3>
         </div>
-        <div class="card-body" style="padding: 0;">
+        <div class="card-body p-0">
             <table class="table">
                 <thead>
                     <tr>
@@ -84,7 +84,7 @@
         <div class="card-header">
             <h3><i class="fas fa-poll"></i> Recent Survey Responses</h3>
         </div>
-        <div class="card-body" style="padding: 0;">
+        <div class="card-body p-0">
             <table class="table">
                 <thead>
                     <tr>
@@ -109,9 +109,9 @@
     </div>
 
     <!-- Quick Links -->
-    <div style="margin-top: var(--space-xl);">
-        <h3 style="margin-bottom: var(--space-lg);">Quick Links</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-lg);">
+    <div class="mt-md mb-xl">
+        <h3 class="mb-lg">Quick Links</h3>
+        <div class="d-grid-200">
             <a href="{{ url_for('analytics') }}" class="btn btn-primary">
                 <i class="fas fa-chart-bar"></i> View Analytics
             </a>

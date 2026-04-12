@@ -29,6 +29,26 @@
         </section>
         
         <div class="portal-grid">
+            <article class="portal-card password-card" data-accent="security" onclick="openChangePasswordModal()">
+                <div class="portal-card-header">
+                    <div class="portal-card-icon">
+                        <i class="fas fa-lock"></i>
+                    </div>
+                    <div>
+                        <h3>Change Password</h3>
+                        <p class="portal-card-subtitle">Secure your account</p>
+                    </div>
+                </div>
+                <div class="status-badge secure">
+                    <i class="fas fa-shield-alt"></i> Protected Account
+                </div>
+                <div class="portal-card-actions">
+                    <button class="btn btn-primary btn-sm w-100" onclick="event.stopPropagation(); openChangePasswordModal()">
+                        <i class="fas fa-key"></i> Update Password
+                    </button>
+                </div>
+            </article>
+
             <article class="portal-card" data-accent="admin">
                 <div class="portal-card-header">
                     <div class="portal-card-icon">
@@ -145,17 +165,27 @@
         <div class="recent-activity">
             <h3>Recent Activity</h3>
             <div class="activity-list">
-                <!-- Recent registrations, survey submissions, etc. -->
-                <div class="activity-item">
-                    <i class="fas fa-user-plus"></i>
-                    <span>New alumni registration: test@example.com</span>
-                    <small>2 hours ago</small>
-                </div>
-                <div class="activity-item">
-                    <i class="fas fa-poll"></i>
-                    <span>New survey submitted</span>
-                    <small>1 day ago</small>
-                </div>
+                {% if recent_activity %}
+                    {% for log in recent_activity[-5:] %}
+                    <div class="activity-item">
+                        <i class="fas fa-{% if 'register' in log.action or 'login' in log.action %}user-plus
+                            {% elif 'survey' in log.action %}poll
+                            {% elif 'rsvp' in log.action %}calendar-check
+                            {% elif 'job' in log.action %}briefcase
+                            {% elif 'event' in log.action %}calendar-alt
+                            {% else %}circle{% endif %}"></i>
+                        <span>{{ log.action.replace('_', ' ').title() }} by {{ log.user.email if log.user else 'System' }}</span>
+                        <small>{{ log.timestamp.strftime('%-I:%M %p') if log.timestamp else 'Just now' }}
+                            {% if log.ip_address %}(from {{ log.ip_address }}){% endif %}
+                        </small>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="activity-item text-muted text-center py-4">
+                        <i class="fas fa-clock fa-2x mb-2"></i>
+                        <p>No recent activity. Actions logged on login/register/survey/RSVP/etc.</p>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>

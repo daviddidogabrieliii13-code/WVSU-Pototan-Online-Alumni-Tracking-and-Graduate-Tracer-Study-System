@@ -91,7 +91,7 @@ login_manager.login_message_category = "warning"
 login_manager.init_app(app)
 
 app.config.setdefault("OTP_EXPIRY_SECONDS", 300)
-app.config.setdefault("SHOW_OTP_IN_UI", False)
+app.config.setdefault("SHOW_OTP_IN_UI", True)
 app.config.setdefault("OTP_MODE", "totp")
 app.config.setdefault("OTP_TIMESTEP_SECONDS", 30)
 app.config.setdefault("OTP_MAX_ATTEMPTS", 5)
@@ -4517,6 +4517,11 @@ def init_app():
         fix_invalid_roles()
         seed_users()
         ensure_user_approval_integrity()
+
+
+if __name__ == "__main__":
+    init_app()
+    app.run(debug=True, host="0.0.0.0", port=5000)
 
 
 if __name__ == "__main__":

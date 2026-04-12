@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}OTP Verification - WVSU Alumni System{% endblock %}
+{% block title %}OTP Fallback - WVSU Alumni System{% endblock %}
 
 {% block content %}
 <section class="auth-page" data-portal="{{ role_slug }}">
@@ -8,10 +8,8 @@
         <article class="auth-card">
             <header class="auth-header">
                 <div class="logo-icon auth-icon"><i class="fas fa-shield-alt"></i></div>
-                <h1>OTP VERIFICATION</h1>
-                {% if otp_delivery != 'smtp' %}
-                <p style="color: var(--warning);">This OTP is for testing only</p>
-                {% endif %}
+                <h1>{{ role_label }} Portal OTP Verification</h1>
+                <p>OTP email unavailable. Use the on-screen code below to {% if purpose == 'registration' %}activate the account{% else %}complete sign in{% endif %}.</p>
             </header>
 
             <div class="auth-body">
@@ -23,17 +21,12 @@
                     <div class="form-group">
                         <label class="form-label required">6-digit OTP</label>
                         <input type="text" name="otp" class="form-control otp-input" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required autocomplete="one-time-code">
-                        <small class="form-text">OTP expires in <strong id="otpCountdown" data-seconds="{{ expires_in | default(0) }}">{{ expires_in | default(0) }}</strong> seconds.</small>
-                        <small class="form-text">Attempts remaining: <strong>{{ attempts_remaining | default(0) }}</strong> of {{ max_attempts | default(0) }}.</small>
-                    </div>
-
-                    {% if otp %}
-                    <div class="otp-display" style="margin: 1.5rem 0; padding: 1.5rem; background: linear-gradient(145deg, rgba(248,251,255,0.95), rgba(232,244,255,0.88)); border: 2px solid rgba(0,71,171,0.25); border-radius: 20px; text-align: center; box-shadow: 0 16px 32px rgba(0,71,171,0.15), inset 0 1px 0 rgba(255,255,255,0.9);">
-                        <div style="font-size: clamp(3rem, 12vw, 5.5rem); font-weight: 900; letter-spacing: 0.5em; color: #0047ab; text-shadow: 0 4px 12px rgba(0,71,171,0.4); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-bottom: 0.25rem;">
-                            {{ otp }}
+                        <div class="otp-info">
+                            <strong>OTP: <span class="otp-code">{{ otp }}</span></strong>
+                            <small>This OTP expires in {{ expires_in }} seconds.</small>
                         </div>
+                        <small class="form-text">Attempts remaining: <strong>{{ attempts_remaining }}</strong> of {{ max_attempts }}.</small>
                     </div>
-                    {% endif %}
 
                     {% if lock_seconds and lock_seconds > 0 %}
                     <div class="alert alert-warning" style="margin-bottom: var(--space-md);">
@@ -52,7 +45,7 @@
                 {% if resend_wait_seconds and resend_wait_seconds > 0 %}
                     <p>Resend available in {{ resend_wait_seconds }} second(s).</p>
                 {% else %}
-                    <p><a href="{{ url_for('resend_otp', email=email, role=role_slug, purpose=purpose) }}">Resend OTP</a></p>
+                    <p><a href="{{ url_for('resend_otp', email=email, role=role_slug, purpose=purpose) }}">Request new OTP</a></p>
                 {% endif %}
                 {% if purpose == 'registration' %}
                     <p><a href="{{ register_url }}">Back to registration</a></p>

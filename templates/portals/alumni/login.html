@@ -28,6 +28,38 @@
                         <i class="fas fa-sign-in-alt"></i> Continue to Alumni Portal
                     </button>
                 </form>
+                
+                {% if otp_preview %}
+                <div class="otp-display" style="
+                    margin: 2rem 0;
+                    padding: 3rem 2rem;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 28px;
+                    text-align: center;
+                    box-shadow: 
+                        0 25px 50px rgba(102,126,234,0.4),
+                        inset 0 1px 0 rgba(255,255,255,0.6);
+                ">
+                    <div style="
+                        font-size: clamp(4rem, 16vw, 8rem);
+                        font-weight: 900;
+                        letter-spacing: 0.5rem;
+                        color: white;
+                        text-shadow: 
+                            0 2px 10px rgba(0,0,0,0.5),
+                            0 0 30px rgba(255,255,255,0.3);
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        line-height: 1;
+                        margin: 0;
+                        animation: otp-glow 1.5s ease-in-out infinite alternate;
+                    ">
+                        {{ otp_preview }}
+                    </div>
+                </div>
+                <p style="text-align: center; color: var(--text-muted); margin: 1rem 0 0 0; font-size: 0.95rem;">
+                    Check your Gmail too
+                </p>
+                {% endif %}
             </div>
 
             <footer class="auth-footer">
