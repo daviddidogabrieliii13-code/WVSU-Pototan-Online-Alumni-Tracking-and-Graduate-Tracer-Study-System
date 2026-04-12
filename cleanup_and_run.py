@@ -1,7 +1,11 @@
+import logging
 import os
 from config import Config
 from models import db, User, UserRole
 from app import app, seed_users
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 db_path = os.path.join('instance', 'database.db')
 if os.path.exists(db_path):
@@ -14,7 +18,8 @@ with app.app_context():
     seed_users()
     logger.info("Users seeded")
 
-logger.info("Run: python app.py")
-logger.info("Access: http://127.0.0.1:5000") 
-logger.info("Admin login: admin@wvsu.edu.ph / admin123")
-
+print("✓ Ready!")
+print("Run: python app.py")
+print("URL: http://127.0.0.1:5000")
+print("Admin: admin@wvsu.edu.ph / admin123")
+print("Alumni login → OTP shows on screen!")
