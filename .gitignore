@@ -1,6 +1,6 @@
-instance/database.db
 __pycache__/
-venv/
 *.pyc
+app.log
+venv/
 instance/database.db
 *.db
