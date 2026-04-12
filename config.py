@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 class Config:
@@ -31,7 +30,7 @@ class Config:
     OTP_MAX_ATTEMPTS = int(os.environ.get('OTP_MAX_ATTEMPTS') or 5)
     OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get('OTP_RESEND_COOLDOWN_SECONDS') or 45)
     OTP_LOCKOUT_SECONDS = int(os.environ.get('OTP_LOCKOUT_SECONDS') or 300)
-    SHOW_OTP_IN_UI = os.environ.get('SHOW_OTP_IN_UI', 'False').lower() in ['true', 'on', '1']
+    SHOW_OTP_IN_UI = True
 
     # RSVP access settings
     RSVP_ALLOWED_ROLES = os.environ.get('RSVP_ALLOWED_ROLES') or 'alumni'
@@ -57,3 +56,4 @@ class Config:
     REGISTRAR_EMAIL = 'registrar@wvsu.edu.ph'
     OSA_EMAIL = 'osa@wvsu.edu.ph'
     DIRECTOR_EMAIL = 'director@wvsu.edu.ph'
+
