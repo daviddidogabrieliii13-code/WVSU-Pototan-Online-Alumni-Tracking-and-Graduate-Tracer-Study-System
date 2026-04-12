@@ -92,6 +92,18 @@ os.makedirs(profile_photo_folder, exist_ok=True)
 app.config["PROFILE_PHOTO_FOLDER"] = profile_photo_folder
 
 db.init_app(app)
+
+# FIXED: Auto-create tables for Render/Gunicorn (PostgreSQL)
+with app.app_context():
+    try:
+        db.create_all()
+        # Skip SQLite-only migrations for PostgreSQL
+        if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite:///"):
+            ensure_sqlite_schema()
+        print("✓ Database tables initialized successfully")
+    except Exception as e:
+        print(f"DB init non-fatal warning: {e}")
+
 mail = Mail(app)
 app.register_blueprint(api_bp)
 app.register_blueprint(export_bp)
@@ -4521,16 +4533,27 @@ def server_error(_error):
     )
 
 
-def init_app():
+def safe_db_init():
+    """Safe database initialization for production (Gunicorn) and local use."""
     with app.app_context():
-        db.create_all()
-        ensure_sqlite_schema()
-        fix_invalid_roles()
-        seed_users()
-        ensure_user_approval_integrity()
+        try:
+            db.create_all()
+            # SQLite-specific migrations only
+            if "sqlite:///" in app.config["SQLALCHEMY_DATABASE_URI"]:
+                ensure_sqlite_schema()
+            fix_invalid_roles()
+            seed_users()
+            ensure_user_approval_integrity()
+            print("✅ Database tables initialized successfully")
+        except Exception as e:
+            print(f"⚠️  Database init warning (non-fatal): {e}")
+            print("App will continue - manual DB setup may be needed")
+
+
+# Auto-initialize for Render/Gunicorn (runs on module import)
+safe_db_init()
 
 
 if __name__ == "__main__":
-    init_app()
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host="0.0.0.0", port=port)
