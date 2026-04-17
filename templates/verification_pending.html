@@ -3,7 +3,7 @@
 {% block title %}Email Verification Pending - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="container page-stack" style="padding-top: var(--space-xl);">
+<div class="container page-stack page-top">
     <section class="section-card">
         <h1>Email Verification Required</h1>
         <p class="text-muted">
@@ -17,14 +17,15 @@
         {% if preview_link %}
         <div class="otp-info">
             <strong>Verification Link ({{ delivery_mode | upper }})</strong>
-            <p style="margin-top: 0.45rem; margin-bottom: 0;">
+            <p class="info-block-text">
                 This fallback link is shown because SMTP delivery is disabled or using the school-domain UI flow.
             </p>
-            <p style="margin-top: 0.55rem; margin-bottom: 0;">
-                <a href="{{ preview_link }}">{{ preview_link }}</a>
-            </p>
+            <div class="form-control copy-target" data-copy-text="{{ preview_link }}" data-copy-state="Copy" title="Click to copy the verification link">
+                {{ preview_link }}
+            </div>
+            <p class="info-block-text"><a href="{{ preview_link }}">Open verification link</a></p>
             {% if expires_at %}
-            <p style="margin-top: 0.45rem; margin-bottom: 0;">Expires at: {{ expires_at }}</p>
+            <p class="info-block-text">Expires at: {{ expires_at }}</p>
             {% endif %}
         </div>
         {% endif %}

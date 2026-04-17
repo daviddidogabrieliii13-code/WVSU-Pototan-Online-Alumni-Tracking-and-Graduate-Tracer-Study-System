@@ -20,22 +20,30 @@
 
                     <div class="form-group">
                         <label class="form-label required">6-digit OTP</label>
-                        <input type="text" name="otp" class="form-control otp-input" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required autocomplete="one-time-code">
-                        <div class="otp-info">
-                            <strong>OTP: <span class="otp-code">{{ otp }}</span></strong>
-                            <small>This OTP expires in {{ expires_in }} seconds.</small>
+                        <div class="otp-field" data-otp-field>
+                            <input type="text" name="otp" class="form-control otp-input otp-input-master" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required autocomplete="one-time-code">
+                            <div class="otp-slot-grid" aria-hidden="true">
+                                {% for index in range(6) %}
+                                <input type="text" class="otp-slot-input" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-otp-slot autocomplete="one-time-code" aria-label="OTP digit {{ index + 1 }}">
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="otp-demo-card">
+                            <div class="otp-demo-label">Current OTP</div>
+                            <div class="otp-demo-value">{{ otp }}</div>
+                            <p class="otp-demo-hint">This on-screen code expires in {{ expires_in }} seconds.</p>
                         </div>
                         <small class="form-text">Attempts remaining: <strong>{{ attempts_remaining }}</strong> of {{ max_attempts }}.</small>
                     </div>
 
                     {% if lock_seconds and lock_seconds > 0 %}
-                    <div class="alert alert-warning" style="margin-bottom: var(--space-md);">
+                    <div class="alert alert-warning">
                         <i class="fas fa-clock"></i>
                         <span>Too many failed attempts. Try again in {{ lock_seconds }} second(s).</span>
                     </div>
                     {% endif %}
 
-                    <button type="submit" class="btn btn-primary w-100">
+                    <button type="submit" class="btn btn-primary w-100" data-loading-text="Verifying...">
                         <i class="fas fa-check-circle"></i> Verify OTP
                     </button>
                 </form>
@@ -43,7 +51,7 @@
 
             <footer class="auth-footer">
                 {% if resend_wait_seconds and resend_wait_seconds > 0 %}
-                    <p>Resend available in {{ resend_wait_seconds }} second(s).</p>
+                    <p><span class="countdown-text" data-countdown-template="Resend available in {n} second(s)." data-seconds="{{ resend_wait_seconds }}">Resend available in {{ resend_wait_seconds }} second(s).</span></p>
                 {% else %}
                     <p><a href="{{ url_for('resend_otp', email=email, role=role_slug, purpose=purpose) }}">Request new OTP</a></p>
                 {% endif %}

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 from datetime import datetime
 
+import bcrypt
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -69,13 +70,23 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
     def set_otp(self, otp):
-        self.otp_code_hash = hashlib.sha256((otp or "").encode()).hexdigest()
+        otp_bytes = (otp or "").encode("utf-8")
+        self.otp_code_hash = bcrypt.hashpw(otp_bytes, bcrypt.gensalt()).decode("utf-8")
 
     def verify_otp(self, otp):
         if not otp or not self.otp_code_hash:
             return False
-        provided_hash = hashlib.sha256(otp.encode()).hexdigest()
-        return hmac.compare_digest(provided_hash, self.otp_code_hash)
+        stored_hash = str(self.otp_code_hash)
+        otp_bytes = otp.encode("utf-8")
+
+        if stored_hash.startswith("$2"):
+            try:
+                return bcrypt.checkpw(otp_bytes, stored_hash.encode("utf-8"))
+            except ValueError:
+                return False
+
+        provided_hash = hashlib.sha256(otp_bytes).hexdigest()
+        return hmac.compare_digest(provided_hash, stored_hash)
 
     def to_dict(self, include_profile=False):
         payload = {

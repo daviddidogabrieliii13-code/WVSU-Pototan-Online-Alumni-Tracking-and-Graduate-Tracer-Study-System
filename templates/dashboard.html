@@ -34,9 +34,9 @@
             </div>
             <h4>{{ profile.first_name }} {{ profile.last_name }}</h4>
             <p>{{ profile.degree }}</p>
-        <p class="text-muted" style="font-size: 0.8rem;">Class of {{ profile.year_graduated }}</p>
-    </div>
-</aside>
+            <p class="text-muted dashboard-class-year">Class of {{ profile.year_graduated }}</p>
+        </div>
+    </aside>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -120,25 +120,25 @@
                     <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
                 </div>
                 <div class="card-body">
-                    <div class="d-grid gap-md">
-                        <a href="{{ url_for('profile') }}" class="btn btn-outline d-flex">
+                    <div class="dashboard-quick-links">
+                        <a href="{{ url_for('profile') }}" class="btn btn-outline dashboard-quick-link">
                             <i class="fas fa-user-edit"></i> Update Profile
                         </a>
-                        <a href="{{ url_for('reset_password_dashboard') }}" class="btn btn-outline" style="justify-content: flex-start;">
+                        <a href="{{ url_for('reset_password_dashboard') }}" class="btn btn-outline dashboard-quick-link">
                             <i class="fas fa-key"></i> Change Password
                         </a>
-                        <a href="{{ url_for('alumni_module_form') }}" class="btn btn-outline" style="justify-content: flex-start;">
+                        <a href="{{ url_for('alumni_module_form') }}" class="btn btn-outline dashboard-quick-link">
                             <i class="fas fa-id-card"></i> 4-Part Form
                         </a>
                         {% if not profile.survey_completed %}
-                        <a href="{{ url_for('survey') }}" class="btn btn-outline" style="justify-content: flex-start;">
+                        <a href="{{ url_for('survey') }}" class="btn btn-outline dashboard-quick-link">
                             <i class="fas fa-poll"></i> Complete Survey
                         </a>
                         {% endif %}
-                        <a href="{{ url_for('jobs') }}" class="btn btn-outline" style="justify-content: flex-start;">
+                        <a href="{{ url_for('jobs') }}" class="btn btn-outline dashboard-quick-link">
                             <i class="fas fa-search"></i> Browse Jobs
                         </a>
-                        <a href="{{ url_for('alumni_directory') }}" class="btn btn-outline" style="justify-content: flex-start;">
+                        <a href="{{ url_for('alumni_directory') }}" class="btn btn-outline dashboard-quick-link">
                             <i class="fas fa-users"></i> Find Alumni
                         </a>
                     </div>
@@ -152,24 +152,24 @@
                 </div>
                 <div class="card-body">
                     {% if upcoming_events %}
-                    <div style="display: grid; gap: var(--space-md);">
+                    <div class="dashboard-events-list">
                         {% for event in upcoming_events %}
-                        <div style="display: flex; gap: var(--space-md); padding: var(--space-md); background: var(--bg-body); border-radius: var(--radius-md);">
-                            <div style="text-align: center; min-width: 50px;">
-                                <div style="font-size: 1.25rem; font-weight: 700; color: var(--primary);">{{ event.event_date.strftime('%d') }}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ event.event_date.strftime('%b') }}</div>
+                        <div class="dashboard-event-item">
+                            <div class="dashboard-event-date">
+                                <div class="dashboard-event-day">{{ event.event_date.strftime('%d') }}</div>
+                                <div class="dashboard-event-month">{{ event.event_date.strftime('%b') }}</div>
                             </div>
-                            <div>
-                                <h4 style="font-size: 1rem; margin-bottom: var(--space-xs);">{{ event.title }}</h4>
-                                <p style="font-size: 0.85rem; color: var(--text-secondary);"><i class="fas fa-map-marker-alt"></i> {{ event.location }}</p>
+                            <div class="dashboard-event-body">
+                                <h4 class="dashboard-event-title">{{ event.title }}</h4>
+                                <p class="dashboard-event-location"><i class="fas fa-map-marker-alt"></i> {{ event.location }}</p>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
-                    <a href="{{ url_for('events') }}" class="btn btn-outline btn-sm" style="margin-top: var(--space-md);">View All Events</a>
+                    <a href="{{ url_for('events') }}" class="btn btn-outline btn-sm dashboard-events-link">View All Events</a>
                     {% else %}
-                    <div class="text-center" style="padding: var(--space-lg); color: var(--text-secondary);">
-                        <i class="fas fa-calendar-times" style="font-size: 2rem; margin-bottom: var(--space-md);"></i>
+                    <div class="text-center dashboard-empty-state">
+                        <i class="fas fa-calendar-times"></i>
                         <p>No upcoming events</p>
                     </div>
                     {% endif %}
@@ -179,7 +179,7 @@
 
         <!-- Recent Jobs -->
         {% if recent_jobs %}
-        <div style="margin-top: var(--space-xl);">
+        <div class="dashboard-section-top">
             <div class="card">
                 <div class="card-header">
                     <h3><i class="fas fa-briefcase"></i> Recent Job Openings</h3>

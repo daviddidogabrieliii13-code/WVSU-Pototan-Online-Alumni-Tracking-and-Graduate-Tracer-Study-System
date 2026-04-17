@@ -3,7 +3,7 @@
 {% block title %}Notifications - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="container page-stack" style="padding-top: var(--space-xl);">
+<div class="container page-stack page-top">
     <section class="section-card">
         <div class="module-form-header">
             <div>
@@ -25,14 +25,14 @@
     {% if notifications %}
     <section class="page-stack">
         {% for item in notifications %}
-        <article class="section-card" style="{% if not item.is_read %}border-color: rgba(47, 111, 201, 0.45);{% endif %}">
+        <article class="section-card notification-card{% if not item.is_read %} notification-card--unread{% endif %}">
             <div class="module-form-header">
                 <div>
-                    <h3 style="margin-bottom: 0.35rem;">{{ item.title }}</h3>
-                    <p class="text-muted" style="margin-bottom: 0.35rem;">
+                    <h3 class="notification-title">{{ item.title }}</h3>
+                    <p class="text-muted notification-meta">
                         {{ item.notification_type | default('system') | upper }} - {{ item.created_at.strftime('%Y-%m-%d %H:%M') if item.created_at else '' }}
                     </p>
-                    <p style="margin: 0;">{{ item.message }}</p>
+                    <p class="notification-message">{{ item.message }}</p>
                 </div>
                 <div>
                     {% if not item.is_read %}

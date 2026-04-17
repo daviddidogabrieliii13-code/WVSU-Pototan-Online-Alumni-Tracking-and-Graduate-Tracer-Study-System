@@ -11,34 +11,34 @@
             <h1><i class="fas fa-users"></i> Manage Alumni</h1>
         </div>
         
-        <div class="table-container">
-            <div class="table-header">
+        <div class="table-container admin-table-shell">
+            <div class="table-header admin-table-toolbar">
                 <h3>All Alumni</h3>
-                <form method="GET" class="d-flex gap-2">
+                <form method="GET" class="search-box table-search-box">
                     <input type="text" name="search" class="form-control" placeholder="Search alumni..." value="{{ search }}">
                     <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i></button>
                 </form>
             </div>
             
-            <table class="table">
+            <table class="table table-admin table-alumni-admin">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Degree</th>
-                        <th>Year</th>
-                        <th>Employment</th>
-                        <th>Actions</th>
+                        <th class="col-name">Name</th>
+                        <th class="col-email">Email</th>
+                        <th class="col-degree">Degree</th>
+                        <th class="col-year">Year</th>
+                        <th class="col-employment">Employment</th>
+                        <th class="col-actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for profile in alumni.items %}
                     <tr>
-                        <td>{{ profile.first_name }} {{ profile.last_name }}</td>
-                        <td>{{ profile.user.email }}</td>
-                        <td>{{ profile.degree }}</td>
-                        <td>{{ profile.year_graduated }}</td>
-                        <td>
+                        <td class="col-name">{{ profile.first_name }} {{ profile.last_name }}</td>
+                        <td class="col-email">{{ profile.user.email }}</td>
+                        <td class="col-degree">{{ profile.degree }}</td>
+                        <td class="col-year">{{ profile.year_graduated }}</td>
+                        <td class="col-employment">
                             {% if profile.employment_status == 'employed' %}
                             <span class="badge badge-success">Employed</span>
                             {% elif profile.employment_status == 'self-employed' %}
@@ -49,15 +49,23 @@
                             <span class="badge badge-warning">Student</span>
                             {% endif %}
                         </td>
-                        <td class="table-actions">
+                        <td class="col-actions">
+                            <div class="table-actions">
                             <a href="{{ url_for('admin_edit_alumni', alumni_id=profile.id) }}" class="btn btn-sm btn-primary">
                                 <i class="fas fa-edit"></i>
                             </a>
-                            <form method="POST" action="{{ url_for('admin_delete_alumni', alumni_id=profile.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this alumni?');">
+                            <form method="POST" action="{{ url_for('admin_delete_alumni', alumni_id=profile.id) }}" class="inline-form" onsubmit="return confirm('Are you sure you want to delete this alumni?');">
                                 <button type="submit" class="btn btn-sm btn-danger">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5">
+                            <p class="text-muted mb-0">No alumni records found.</p>
                         </td>
                     </tr>
                     {% endfor %}

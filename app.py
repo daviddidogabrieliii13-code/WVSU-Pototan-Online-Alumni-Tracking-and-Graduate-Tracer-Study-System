@@ -1,4 +1,5 @@
 import os
+import json
 import secrets
 import sqlite3
 import smtplib
@@ -8,6 +9,9 @@ import time
 import hmac
 import hashlib
 import re
+import base64
+import threading
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from functools import wraps
@@ -25,7 +29,7 @@ from flask import (
     session,
 )
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from flask_mail import Mail, Message
+from flask_mail import Mail
 from sqlalchemy import or_, func
 from werkzeug.utils import secure_filename
 
@@ -93,17 +97,6 @@ app.config["PROFILE_PHOTO_FOLDER"] = profile_photo_folder
 
 db.init_app(app)
 
-# FIXED: Auto-create tables for Render/Gunicorn (PostgreSQL)
-with app.app_context():
-    try:
-        db.create_all()
-        # Skip SQLite-only migrations for PostgreSQL
-        if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite:///"):
-            ensure_sqlite_schema()
-        print("✓ Database tables initialized successfully")
-    except Exception as e:
-        print(f"DB init non-fatal warning: {e}")
-
 mail = Mail(app)
 app.register_blueprint(api_bp)
 app.register_blueprint(export_bp)
@@ -120,12 +113,22 @@ app.config.setdefault("OTP_TIMESTEP_SECONDS", 30)
 app.config.setdefault("OTP_MAX_ATTEMPTS", 5)
 app.config.setdefault("OTP_RESEND_COOLDOWN_SECONDS", 45)
 app.config.setdefault("OTP_LOCKOUT_SECONDS", 300)
+app.config.setdefault("OTP_REQUEST_RATE_LIMIT_MAX", 3)
+app.config.setdefault("OTP_REQUEST_RATE_LIMIT_WINDOW_SECONDS", 60)
+app.config.setdefault("OTP_VERIFY_RATE_LIMIT_MAX", 8)
+app.config.setdefault("OTP_VERIFY_RATE_LIMIT_WINDOW_SECONDS", 300)
 app.config.setdefault("RSVP_ALLOWED_ROLES", "alumni")
 app.config.setdefault("EMAIL_VERIFICATION_REQUIRED", True)
 app.config.setdefault("EMAIL_VERIFICATION_EXPIRY_HOURS", 24)
 app.config.setdefault("EMAIL_NOTIFICATION_ENABLED", True)
 app.config.setdefault("EMAIL_MOCK_MODE", False)
 app.config.setdefault("MAIL_SUPPRESS_SEND", False)
+app.config.setdefault("JWT_EXPIRY_DAYS", 7)
+app.config.setdefault(
+    "JWT_SECRET_KEY",
+    os.environ.get("JWT_SECRET_KEY") or app.config.get("SECRET_KEY"),
+)
+app.config.setdefault("AUTH_TOKEN_COOKIE_NAME", "wvsu_auth_token")
 try:
     app.config["OTP_EXPIRY_SECONDS"] = int(
         os.environ.get("OTP_EXPIRY_SECONDS", app.config["OTP_EXPIRY_SECONDS"])
@@ -144,6 +147,11 @@ for key, fallback in {
     "OTP_MAX_ATTEMPTS": 5,
     "OTP_RESEND_COOLDOWN_SECONDS": 45,
     "OTP_LOCKOUT_SECONDS": 300,
+    "OTP_REQUEST_RATE_LIMIT_MAX": 3,
+    "OTP_REQUEST_RATE_LIMIT_WINDOW_SECONDS": 60,
+    "OTP_VERIFY_RATE_LIMIT_MAX": 8,
+    "OTP_VERIFY_RATE_LIMIT_WINDOW_SECONDS": 300,
+    "JWT_EXPIRY_DAYS": 7,
 }.items():
     try:
         app.config[key] = int(os.environ.get(key, app.config.get(key, fallback)))
@@ -175,6 +183,21 @@ for key in ("EMAIL_VERIFICATION_REQUIRED", "EMAIL_NOTIFICATION_ENABLED", "EMAIL_
     raw = os.environ.get(key)
     if raw is not None:
         app.config[key] = raw.strip().lower() in {"1", "true", "yes", "on"}
+
+app.config["JWT_SECRET_KEY"] = (
+    os.environ.get("JWT_SECRET_KEY")
+    or app.config.get("JWT_SECRET_KEY")
+    or app.config.get("SECRET_KEY")
+)
+app.config["AUTH_TOKEN_COOKIE_NAME"] = (
+    str(
+        os.environ.get(
+            "AUTH_TOKEN_COOKIE_NAME",
+            app.config.get("AUTH_TOKEN_COOKIE_NAME", "wvsu_auth_token"),
+        )
+    ).strip()
+    or "wvsu_auth_token"
+)
 
 try:
     app.config["EMAIL_VERIFICATION_EXPIRY_HOURS"] = int(
@@ -228,6 +251,8 @@ OTP_SESSION_KEY = "otp_context"
 ACTIVE_USER_ID_KEY = "active_user_id"
 ACTIVE_ROLE_KEY = "active_user_role"
 POST_LOGIN_NEXT_KEY = "post_login_next"
+AUTH_TOKEN_SESSION_KEY = "auth_token"
+AUTH_TOKEN_EXPIRY_SESSION_KEY = "auth_token_expires_at"
 APPROVAL_PENDING = "pending"
 APPROVAL_APPROVED = "approved"
 APPROVAL_REJECTED = "rejected"
@@ -255,6 +280,10 @@ DEFAULT_AVATAR_FILE = "img/default-avatar.svg"
 CAMPUS_LOGO_FILE = "img/Pototan.jpg"
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 PHONE_PATTERN = re.compile(r"^[0-9+\-()\s]{7,24}$")
+
+OTP_REQUEST_RATE_BUCKETS = defaultdict(deque)
+OTP_VERIFY_RATE_BUCKETS = defaultdict(deque)
+RATE_LIMIT_LOCK = threading.Lock()
 
 
 @login_manager.user_loader
@@ -295,6 +324,279 @@ def normalize_role(role):
 
 def clean_text(value):
     return (value or "").strip()
+
+
+def to_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_mail_settings():
+    smtp_server = (
+        clean_text(os.environ.get("MAIL_SERVER", app.config.get("MAIL_SERVER", "smtp.gmail.com")))
+        or "smtp.gmail.com"
+    )
+    smtp_username = clean_text(
+        os.environ.get("MAIL_USERNAME", app.config.get("MAIL_USERNAME"))
+    )
+    raw_password = (
+        os.environ.get("MAIL_PASSWORD")
+        or os.environ.get("GMAIL_APP_PASSWORD")
+        or app.config.get("MAIL_PASSWORD")
+    )
+    smtp_password = clean_text(raw_password)
+    # Gmail App Passwords are commonly copied with spaces grouped in blocks of four.
+    if "gmail.com" in smtp_server.lower():
+        smtp_password = "".join(smtp_password.split())
+
+    smtp_from = (
+        clean_text(os.environ.get("MAIL_FROM", app.config.get("MAIL_FROM")))
+        or smtp_username
+    )
+
+    smtp_port_raw = os.environ.get("MAIL_PORT", app.config.get("MAIL_PORT", 587))
+    try:
+        smtp_port = int(smtp_port_raw)
+    except (TypeError, ValueError):
+        smtp_port = 587
+
+    use_ssl = to_bool(
+        os.environ.get("MAIL_USE_SSL", app.config.get("MAIL_USE_SSL", False)),
+        default=False,
+    )
+    use_tls = to_bool(
+        os.environ.get("MAIL_USE_TLS", app.config.get("MAIL_USE_TLS", not use_ssl)),
+        default=not use_ssl,
+    )
+
+    return {
+        "server": smtp_server,
+        "port": smtp_port,
+        "username": smtp_username,
+        "password": smtp_password,
+        "sender": smtp_from,
+        "use_tls": use_tls and not use_ssl,
+        "use_ssl": use_ssl,
+    }
+
+
+def smtp_delivery_available(settings=None):
+    settings = settings or get_mail_settings()
+    return bool(settings["username"] and settings["password"])
+
+
+def send_smtp_email(subject, recipients, text_body, html_body=None):
+    cleaned_recipients = [
+        clean_text(email).lower() for email in (recipients or []) if clean_text(email)
+    ]
+    if not cleaned_recipients:
+        return False, "No recipient email address was provided."
+
+    settings = get_mail_settings()
+    if not smtp_delivery_available(settings):
+        return (
+            False,
+            "Email is not configured. Set MAIL_USERNAME and GMAIL_APP_PASSWORD (or MAIL_PASSWORD).",
+        )
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = settings["sender"]
+    message["To"] = ", ".join(cleaned_recipients)
+    message.set_content(text_body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
+
+    try:
+        smtp_class = smtplib.SMTP_SSL if settings["use_ssl"] else smtplib.SMTP
+        with smtp_class(settings["server"], settings["port"], timeout=20) as smtp:
+            if settings["use_tls"] and not settings["use_ssl"]:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+            smtp.login(settings["username"], settings["password"])
+            smtp.send_message(message)
+        return True, None
+    except Exception as exc:
+        print(f"SMTP send failed for {cleaned_recipients}: {exc}")
+        return False, "Unable to send email right now."
+
+
+def client_ip_address():
+    forwarded_for = clean_text(request.headers.get("X-Forwarded-For"))
+    if forwarded_for:
+        return clean_text(forwarded_for.split(",")[0])[:45] or "unknown"
+    return clean_text(request.headers.get("X-Real-IP") or request.remote_addr)[:45] or "unknown"
+
+
+def seconds_until_timestamp(timestamp, window_seconds):
+    remaining = window_seconds - (time.time() - timestamp)
+    return max(1, int(remaining + 0.999))
+
+
+def consume_rate_limit(rate_bucket, keys, max_attempts, window_seconds):
+    keys = [key for key in keys if key]
+    if not keys:
+        return True, 0
+
+    now = time.time()
+    retry_after = 0
+
+    with RATE_LIMIT_LOCK:
+        for key in keys:
+            bucket = rate_bucket[key]
+            while bucket and (now - bucket[0]) >= window_seconds:
+                bucket.popleft()
+            if len(bucket) >= max_attempts:
+                retry_after = max(retry_after, seconds_until_timestamp(bucket[0], window_seconds))
+
+        if retry_after > 0:
+            return False, retry_after
+
+        for key in keys:
+            rate_bucket[key].append(now)
+
+    return True, 0
+
+
+def consume_otp_request_rate_limit(email):
+    email_key = clean_text(email).lower()
+    ip_key = client_ip_address()
+    return consume_rate_limit(
+        OTP_REQUEST_RATE_BUCKETS,
+        [
+            f"otp-request:ip:{ip_key}",
+            f"otp-request:email:{email_key}",
+            f"otp-request:pair:{ip_key}:{email_key}",
+        ],
+        max(1, int(app.config.get("OTP_REQUEST_RATE_LIMIT_MAX", 3))),
+        max(30, int(app.config.get("OTP_REQUEST_RATE_LIMIT_WINDOW_SECONDS", 60))),
+    )
+
+
+def consume_otp_verify_rate_limit(email):
+    email_key = clean_text(email).lower()
+    ip_key = client_ip_address()
+    return consume_rate_limit(
+        OTP_VERIFY_RATE_BUCKETS,
+        [
+            f"otp-verify:ip:{ip_key}",
+            f"otp-verify:email:{email_key}",
+            f"otp-verify:pair:{ip_key}:{email_key}",
+        ],
+        max(1, int(app.config.get("OTP_VERIFY_RATE_LIMIT_MAX", 8))),
+        max(60, int(app.config.get("OTP_VERIFY_RATE_LIMIT_WINDOW_SECONDS", 300))),
+    )
+
+
+def jwt_base64url_encode(payload_bytes):
+    return base64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode("ascii")
+
+
+def jwt_base64url_decode(value):
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
+
+
+def auth_token_expiry_seconds():
+    try:
+        return max(1, int(app.config.get("JWT_EXPIRY_DAYS", 7))) * 86400
+    except (TypeError, ValueError):
+        return 7 * 86400
+
+
+def auth_token_secret():
+    return clean_text(app.config.get("JWT_SECRET_KEY")) or clean_text(app.config.get("SECRET_KEY"))
+
+
+def build_auth_token(user):
+    role_slug = to_role_slug(user.role, default="alumni")
+    now = int(time.time())
+    payload = {
+        "sub": str(user.id),
+        "email": clean_text(user.email).lower(),
+        "role": role_slug,
+        "iat": now,
+        "exp": now + auth_token_expiry_seconds(),
+    }
+    header_segment = jwt_base64url_encode(
+        json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode("utf-8")
+    )
+    payload_segment = jwt_base64url_encode(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    )
+    signing_input = f"{header_segment}.{payload_segment}".encode("ascii")
+    signature = hmac.new(
+        auth_token_secret().encode("utf-8"),
+        signing_input,
+        hashlib.sha256,
+    ).digest()
+    token = f"{header_segment}.{payload_segment}.{jwt_base64url_encode(signature)}"
+    expires_at = datetime.utcfromtimestamp(payload["exp"])
+    return token, expires_at
+
+
+def decode_auth_token(token):
+    token_value = clean_text(token)
+    if not token_value:
+        return None
+    parts = token_value.split(".")
+    if len(parts) != 3:
+        return None
+
+    header_segment, payload_segment, signature_segment = parts
+    signing_input = f"{header_segment}.{payload_segment}".encode("ascii")
+
+    try:
+        expected_signature = hmac.new(
+            auth_token_secret().encode("utf-8"),
+            signing_input,
+            hashlib.sha256,
+        ).digest()
+        provided_signature = jwt_base64url_decode(signature_segment)
+        if not hmac.compare_digest(provided_signature, expected_signature):
+            return None
+        payload = json.loads(jwt_base64url_decode(payload_segment).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError, TypeError):
+        return None
+
+    try:
+        if int(payload.get("exp", 0)) <= int(time.time()):
+            return None
+    except (TypeError, ValueError):
+        return None
+    return payload
+
+
+def attach_auth_token(response, token, expires_at):
+    session[AUTH_TOKEN_SESSION_KEY] = token
+    session[AUTH_TOKEN_EXPIRY_SESSION_KEY] = expires_at.isoformat()
+    response.set_cookie(
+        app.config.get("AUTH_TOKEN_COOKIE_NAME", "wvsu_auth_token"),
+        token,
+        max_age=auth_token_expiry_seconds(),
+        expires=expires_at,
+        httponly=True,
+        secure=bool(request.is_secure),
+        samesite="Lax",
+        path="/",
+    )
+    return response
+
+
+def clear_auth_token(response=None):
+    session.pop(AUTH_TOKEN_SESSION_KEY, None)
+    session.pop(AUTH_TOKEN_EXPIRY_SESSION_KEY, None)
+    if response is not None:
+        response.delete_cookie(
+            app.config.get("AUTH_TOKEN_COOKIE_NAME", "wvsu_auth_token"),
+            path="/",
+            samesite="Lax",
+        )
+    return response
 
 
 def rsvp_status_label(status):
@@ -440,6 +742,8 @@ def clear_active_session():
     session.pop(ACTIVE_USER_ID_KEY, None)
     session.pop(ACTIVE_ROLE_KEY, None)
     session.pop(POST_LOGIN_NEXT_KEY, None)
+    session.pop(AUTH_TOKEN_SESSION_KEY, None)
+    session.pop(AUTH_TOKEN_EXPIRY_SESSION_KEY, None)
 
 def clear_otp_context():
     session.pop(OTP_SESSION_KEY, None)
@@ -519,64 +823,39 @@ def send_otp(email, otp, role_slug="alumni"):
     portal_name = ROLE_PORTALS.get(resolved_role, ROLE_PORTALS["alumni"]).get(
         "label", "Alumni"
     )
-    smtp_server = clean_text(
-        os.environ.get("MAIL_SERVER", app.config.get("MAIL_SERVER", "smtp.gmail.com"))
-    ) or "smtp.gmail.com"
-    smtp_username = clean_text(
-        os.environ.get("MAIL_USERNAME", app.config.get("MAIL_USERNAME"))
-    )
-    smtp_password = (
-        os.environ.get("MAIL_PASSWORD")
-        or os.environ.get("GMAIL_APP_PASSWORD")
-        or app.config.get("MAIL_PASSWORD")
-    )
-    smtp_from = (
-        clean_text(os.environ.get("MAIL_FROM", app.config.get("MAIL_FROM")))
-        or smtp_username
-    )
-    smtp_port = app.config.get("MAIL_PORT", 587)
-    try:
-        smtp_port = int(os.environ.get("MAIL_PORT", smtp_port))
-    except (TypeError, ValueError):
-        smtp_port = 587
-
-    use_tls_env = os.environ.get("MAIL_USE_TLS")
-    if use_tls_env is None:
-        use_tls = bool(app.config.get("MAIL_USE_TLS", True))
-    else:
-        use_tls = use_tls_env.strip().lower() in {"1", "true", "yes", "on"}
-
-    if not smtp_username or not smtp_password:
+    if not smtp_delivery_available():
         raise RuntimeError(
-            "OTP email is not configured. Set MAIL_USERNAME and MAIL_PASSWORD (Gmail App Password)."
+            "OTP email is not configured. Set MAIL_USERNAME and GMAIL_APP_PASSWORD for your Gmail sender."
         )
 
     minutes = max(1, app.config.get("OTP_EXPIRY_SECONDS", 300) // 60)
-    message = EmailMessage()
-    message["Subject"] = "OTP Verification Code"
-    message["From"] = smtp_from
-    message["To"] = normalized_email
-    message.set_content(
-        (
-            f"Hello,\n\n"
-            f"Your OTP verification code for the WVSU {portal_name} Portal is: {otp}\n\n"
-            f"This code expires in {minutes} minute(s).\n"
-            f"If you did not request this code, please ignore this email.\n\n"
-            f"Regards,\nWVSU Alumni Tracking System"
-        )
+    text_body = (
+        f"Hello,\n\n"
+        f"Your OTP verification code for the WVSU {portal_name} Portal is: {otp}\n\n"
+        f"This code expires in {minutes} minute(s).\n"
+        f"If you did not request this code, please ignore this email.\n\n"
+        f"Regards,\nWVSU Alumni Tracking System"
     )
-
-    try:
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as smtp:
-            if use_tls:
-                smtp.starttls()
-            smtp.login(smtp_username, smtp_password)
-            smtp.send_message(message)
+    html_body = render_template(
+        "emails/otp_code.html",
+        otp=otp,
+        portal_name=portal_name,
+        expires_minutes=minutes,
+        recipient_email=normalized_email,
+    )
+    sent, error_message = send_smtp_email(
+        subject="OTP Verification Code",
+        recipients=[normalized_email],
+        text_body=text_body,
+        html_body=html_body,
+    )
+    if sent:
         return "smtp"
-    except Exception as exc:
+    if error_message:
         raise RuntimeError(
-            "We could not deliver the OTP email right now. Please try again."
-        ) from exc
+            "We could not deliver the OTP email right now. Check your Gmail app password and SMTP settings, then try again."
+        )
+    raise RuntimeError("We could not deliver the OTP email right now. Please try again.")
 
 
 def issue_otp(user, purpose, role_slug):
@@ -721,8 +1000,31 @@ def validate_active_session():
         logout_user()
         clear_active_session()
         clear_otp_context()
+        clear_email_verification_context()
+        response = redirect(role_login_url(role_slug))
+        clear_auth_token(response)
         flash("Session validation failed. Please sign in again.", "warning")
-        return redirect(role_login_url(role_slug))
+        return response
+
+    auth_token = session.get(AUTH_TOKEN_SESSION_KEY) or request.cookies.get(
+        app.config.get("AUTH_TOKEN_COOKIE_NAME", "wvsu_auth_token")
+    )
+    if auth_token:
+        payload = decode_auth_token(auth_token)
+        if (
+            not payload
+            or payload.get("sub") != str(current_user.id)
+            or payload.get("role") != role_slug
+        ):
+            logout_user()
+            clear_active_session()
+            clear_otp_context()
+            clear_email_verification_context()
+            response = redirect(role_login_url(role_slug))
+            clear_auth_token(response)
+            flash("Your secure session expired. Please sign in again.", "warning")
+            return response
+        session[AUTH_TOKEN_SESSION_KEY] = auth_token
 
     return None
 
@@ -854,6 +1156,10 @@ def is_valid_email(value):
     return bool(EMAIL_PATTERN.fullmatch(clean_text(value)))
 
 
+def is_valid_otp(value):
+    return bool(re.fullmatch(r"\d{6}", clean_text(value)))
+
+
 def is_valid_phone(value):
     phone_value = clean_text(value)
     if not phone_value:
@@ -903,6 +1209,42 @@ def delete_profile_photo_file(path):
 
     if within_photo_root and os.path.exists(absolute_path):
         os.remove(absolute_path)
+
+
+def collect_profile_photo_paths(*profiles):
+    paths = []
+    for profile in profiles:
+        candidate = clean_text(getattr(profile, "profile_photo", ""))
+        if candidate:
+            paths.append(candidate)
+    return paths
+
+
+def delete_profile_photo_files(paths):
+    for path in sorted(set(path for path in (paths or []) if clean_text(path))):
+        delete_profile_photo_file(path)
+
+
+def purge_user_auth_records(user_id):
+    if not user_id:
+        return
+    PasswordReset.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    EmailVerificationToken.query.filter_by(user_id=user_id).delete(
+        synchronize_session=False
+    )
+
+
+def delete_user_account(user):
+    if not user:
+        return []
+
+    profile = user.profile
+    photo_paths = collect_profile_photo_paths(profile)
+    if profile:
+        db.session.delete(profile)
+    purge_user_auth_records(user.id)
+    db.session.delete(user)
+    return photo_paths
 
 
 def save_profile_photo_upload(file_storage):
@@ -1112,6 +1454,17 @@ def generate_temporary_password(length=12):
             return candidate
 
 
+def get_seed_account_password(role_slug):
+    role_key = clean_text(role_slug).upper()
+    configured_password = clean_text(
+        os.environ.get(f"{role_key}_SEED_PASSWORD")
+        or os.environ.get("DEFAULT_PORTAL_SEED_PASSWORD")
+    )
+    if configured_password:
+        return configured_password, False
+    return "admin123", True
+
+
 def clear_email_verification_context():
     """Remove temporary verification-link preview data from session."""
     session.pop(EMAIL_CONTEXT_SESSION_KEY, None)
@@ -1139,9 +1492,7 @@ def should_mock_email_delivery():
         return True
     if app.config.get("MAIL_SUPPRESS_SEND"):
         return True
-    smtp_username = clean_text(app.config.get("MAIL_USERNAME"))
-    smtp_password = clean_text(app.config.get("MAIL_PASSWORD"))
-    return not smtp_username or not smtp_password
+    return not smtp_delivery_available()
 
 
 def send_system_email(subject, recipients, text_body, html_template=None, **context):
@@ -1159,19 +1510,16 @@ def send_system_email(subject, recipients, text_body, html_template=None, **cont
         print(f"[MOCK EMAIL] subject={subject} recipients={cleaned_recipients}\n{text_body}\n")
         return "mock", None
 
-    try:
-        message = Message(
-            subject=subject,
-            recipients=cleaned_recipients,
-            body=text_body,
-            sender=clean_text(app.config.get("MAIL_FROM")) or clean_text(app.config.get("MAIL_USERNAME")),
-        )
-        if html_template:
-            message.html = render_template(html_template, **context)
-        mail.send(message)
+    html_body = render_template(html_template, **context) if html_template else None
+    sent, error_message = send_smtp_email(
+        subject=subject,
+        recipients=cleaned_recipients,
+        text_body=text_body,
+        html_body=html_body,
+    )
+    if sent:
         return "smtp", None
-    except Exception:
-        return "mock", "Unable to send email right now."
+    return "mock", error_message or "Unable to send email right now."
 
 
 def build_email_verification_link(token):
@@ -1521,6 +1869,9 @@ def handle_portal_registration(role_slug):
         if password != confirm_password:
             flash("Passwords do not match.", "danger")
             return render_template(template_name, **template_context)
+        if len(password) < 8:
+            flash("Password must be at least 8 characters long.", "danger")
+            return render_template(template_name, **template_context)
 
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
@@ -1561,6 +1912,15 @@ def handle_portal_registration(role_slug):
                 year_graduated=year_graduated,
             )
             db.session.add(profile)
+
+        request_allowed, retry_after = consume_otp_request_rate_limit(email)
+        if not request_allowed:
+            flash(
+                f"Too many OTP requests for this account. Please wait {retry_after} second(s) before trying again.",
+                "warning",
+            )
+            db.session.rollback()
+            return render_template(template_name, **template_context)
 
         try:
             issue_otp(user, OTP_PURPOSE_REGISTRATION, role_slug)
@@ -1604,6 +1964,12 @@ def handle_portal_login(role_slug):
     if request.method == "POST":
         email = clean_text(request.form.get("email")).lower()
         password = request.form.get("password", "")
+        if not email or not password:
+            flash("Email and password are required.", "danger")
+            return render_template(template_name, **template_context)
+        if not is_valid_email(email):
+            flash("Please provide a valid email address.", "danger")
+            return render_template(template_name, **template_context)
         user = User.query.filter_by(email=email).first()
 
         if not user or not user.check_password(password):
@@ -1681,6 +2047,13 @@ def handle_portal_login(role_slug):
             if not user.otp_verified
             else OTP_PURPOSE_LOGIN
         )
+        request_allowed, retry_after = consume_otp_request_rate_limit(email)
+        if not request_allowed:
+            flash(
+                f"Too many OTP requests for this account. Please wait {retry_after} second(s) before trying again.",
+                "warning",
+            )
+            return render_template(template_name, **template_context)
         try:
             issue_otp(user, otp_purpose, role_slug)
         except RuntimeError as exc:
@@ -1725,16 +2098,20 @@ def handle_portal_login(role_slug):
 
 
 def seed_users():
-    def ensure_user(email, role, password):
+    def ensure_user(email, role):
         user = User.query.filter_by(email=email).first()
+        role_slug = to_role_slug(role, default="alumni")
+        seed_password, using_bootstrap_password = get_seed_account_password(role_slug)
         if not user:
             user = User(email=email, role=role)
-            user.set_password(password)
+            user.set_password(seed_password)
             user.otp_verified = True
             user.email_verified = True
             user.email_verified_at = datetime.utcnow()
-            user.must_change_password = False
-            user.temporary_password_issued_at = None
+            user.must_change_password = using_bootstrap_password
+            user.temporary_password_issued_at = (
+                datetime.utcnow() if using_bootstrap_password else None
+            )
             user.approval_status = APPROVAL_APPROVED
             user.approval_requested_at = datetime.utcnow()
             user.approved_at = datetime.utcnow()
@@ -1750,17 +2127,16 @@ def seed_users():
             user.otp_verified = True
             user.email_verified = True
             user.email_verified_at = datetime.utcnow()
-            user.must_change_password = False
-            user.temporary_password_issued_at = None
+            user.must_change_password = bool(getattr(user, "must_change_password", False))
             user.approval_status = APPROVAL_APPROVED
             user.approved_at = datetime.utcnow()
             user.is_active = True
         return user
 
-    ensure_user("admin@wvsu.edu.ph", UserRole.ADMIN, "admin123")
-    ensure_user("director@wvsu.edu.ph", UserRole.DIRECTOR, "admin123")
-    ensure_user("registrar@wvsu.edu.ph", UserRole.REGISTRAR, "admin123")
-    ensure_user("osa@wvsu.edu.ph", UserRole.OSA, "admin123")
+    ensure_user("admin@wvsu.edu.ph", UserRole.ADMIN)
+    ensure_user("director@wvsu.edu.ph", UserRole.DIRECTOR)
+    ensure_user("registrar@wvsu.edu.ph", UserRole.REGISTRAR)
+    ensure_user("osa@wvsu.edu.ph", UserRole.OSA)
     db.session.commit()
 
 
@@ -2116,6 +2492,9 @@ def verify_otp():
     if request.method == "POST":
         email = clean_text(request.form.get("email")).lower()
         otp = clean_text(request.form.get("otp"))
+        if not email or not is_valid_email(email):
+            flash("Please provide a valid email address before verifying OTP.", "danger")
+            return redirect(url_for("index"))
         role_slug = to_role_slug(request.form.get("role"))
         if not role_slug:
             flash("Invalid portal context. Please request a new OTP.", "danger")
@@ -2134,6 +2513,21 @@ def verify_otp():
             if purpose == OTP_PURPOSE_REGISTRATION:
                 return redirect(role_register_url(role_slug))
             return redirect(role_login_url(role_slug))
+
+        verify_allowed, retry_after = consume_otp_verify_rate_limit(email)
+        if not verify_allowed:
+            flash(
+                f"Too many OTP verification attempts. Please wait {retry_after} second(s) before trying again.",
+                "danger",
+            )
+            return redirect(
+                url_for(
+                    "verify_otp",
+                    email=email,
+                    role=role_slug,
+                    purpose=purpose,
+                )
+            )
 
         if is_otp_context_expired(otp_context):
             flash("OTP expired. Please request a new OTP.", "warning")
@@ -2181,7 +2575,7 @@ def verify_otp():
             )
             return redirect(role_login_url(account_role))
 
-        if not re.fullmatch(r"\d{6}", otp):
+        if not is_valid_otp(otp):
             attempts_left = register_otp_failure(otp_context)
             if attempts_left <= 0:
                 wait_seconds = get_otp_lock_seconds_remaining(otp_context)
@@ -2353,9 +2747,12 @@ def verify_otp():
         set_active_session(user)
         user.last_login = datetime.utcnow()
         user.otp_code_hash = None
+        auth_token, auth_token_expires_at = build_auth_token(user)
         if not safe_commit("Unable to complete sign in. Please try again."):
             logout_user()
             clear_active_session()
+            clear_otp_context()
+            clear_email_verification_context()
             return redirect(role_login_url(role_slug))
 
         clear_otp_context()
@@ -2365,11 +2762,14 @@ def verify_otp():
                 "You are using a temporary password. Please set a new password to continue.",
                 "warning",
             )
-            return redirect(url_for("reset_password_dashboard", role=role_slug, forced=1))
+            response = redirect(url_for("reset_password_dashboard", role=role_slug, forced=1))
+            return attach_auth_token(response, auth_token, auth_token_expires_at)
         flash("Sign in successful.", "success")
         if next_page and next_page.startswith("/"):
-            return redirect(next_page)
-        return redirect(role_dashboard_url(role_slug))
+            response = redirect(next_page)
+            return attach_auth_token(response, auth_token, auth_token_expires_at)
+        response = redirect(role_dashboard_url(role_slug))
+        return attach_auth_token(response, auth_token, auth_token_expires_at)
 
     email = clean_text(request.args.get("email") or session.get("otp_email")).lower()
     context_role = to_role_slug(request.args.get("role"))
@@ -2467,6 +2867,11 @@ def resend_otp():
         if role_slug:
             return redirect(role_register_url(role_slug))
         return redirect(url_for("index"))
+    if not is_valid_email(email):
+        flash("Please provide a valid email address.", "danger")
+        if role_slug:
+            return redirect(role_register_url(role_slug))
+        return redirect(url_for("index"))
 
     user = User.query.filter_by(email=email).first()
     if not user:
@@ -2525,6 +2930,21 @@ def resend_otp():
     if resend_wait > 0:
         flash(
             f"Please wait {resend_wait} second(s) before requesting a new OTP.",
+            "warning",
+        )
+        return redirect(
+            url_for(
+                "verify_otp",
+                email=email,
+                role=role_slug,
+                purpose=purpose,
+            )
+        )
+
+    request_allowed, retry_after = consume_otp_request_rate_limit(email)
+    if not request_allowed:
+        flash(
+            f"Too many OTP requests for this account. Please wait {retry_after} second(s) before trying again.",
             "warning",
         )
         return redirect(
@@ -2782,7 +3202,8 @@ def logout():
     clear_otp_context()
     clear_email_verification_context()
     flash("You have been logged out.", "success")
-    return redirect(url_for("index"))
+    response = redirect(url_for("index"))
+    return clear_auth_token(response)
 
 
 @app.route("/portal/<role>/dashboard")
@@ -2866,11 +3287,9 @@ def admin_delete_user(user_id):
         return redirect(url_for("admin_password_management"))
     
     if request.method == "POST":
-        profile = user.profile
-        if profile:
-            db.session.delete(profile)
-        db.session.delete(user)
+        photo_paths = delete_user_account(user)
         if safe_commit("Unable to delete user."):
+            delete_profile_photo_files(photo_paths)
             flash(f"User {user.email} (ID #{user.id}) deleted permanently.", "success")
         return redirect(url_for("admin_password_management"))
     
@@ -3144,6 +3563,13 @@ def admin_system_reset():
         confirmation_phrase = clean_text(request.form.get("confirmation_phrase"))
         keep_default_admin = request.form.get("keep_default_admin") == "1"
         current_admin_email = clean_text(getattr(current_user, "email", "")).lower()
+        photo_paths = [
+            path
+            for (path,) in db.session.query(AlumniProfile.profile_photo)
+            .filter(AlumniProfile.profile_photo.isnot(None))
+            .all()
+            if clean_text(path)
+        ]
 
         if confirmation_phrase != "RESET SYSTEM":
             flash("Confirmation phrase mismatch. System reset cancelled.", "danger")
@@ -3156,6 +3582,7 @@ def admin_system_reset():
             db.session.query(Job).delete(synchronize_session=False)
             db.session.query(Event).delete(synchronize_session=False)
             db.session.query(PasswordReset).delete(synchronize_session=False)
+            db.session.query(EmailVerificationToken).delete(synchronize_session=False)
             db.session.query(Notification).delete(synchronize_session=False)
             db.session.query(SystemLog).delete(synchronize_session=False)
             db.session.query(Report).delete(synchronize_session=False)
@@ -3168,32 +3595,46 @@ def admin_system_reset():
                 db.session.query(User).delete(synchronize_session=False)
 
             db.session.commit()
+            default_admin = User.query.filter_by(email=default_admin_email).first()
+            if keep_default_admin:
+                if not default_admin:
+                    seed_password, using_bootstrap_password = get_seed_account_password("admin")
+                    default_admin = User(email=default_admin_email, role=UserRole.ADMIN)
+                    default_admin.set_password(seed_password)
+                    default_admin.must_change_password = using_bootstrap_password
+                    default_admin.temporary_password_issued_at = (
+                        datetime.utcnow() if using_bootstrap_password else None
+                    )
+                    db.session.add(default_admin)
+                default_admin.role = UserRole.ADMIN
+                default_admin.otp_verified = True
+                default_admin.email_verified = True
+                default_admin.email_verified_at = datetime.utcnow()
+                default_admin.approval_status = APPROVAL_APPROVED
+                default_admin.approval_requested_at = datetime.utcnow()
+                default_admin.approved_at = datetime.utcnow()
+                default_admin.approved_by_user_id = None
+                default_admin.approval_notes = "Default admin retained after reset."
+                default_admin.is_active = True
+                db.session.commit()
         except Exception:
             db.session.rollback()
             flash("System reset failed. No changes were finalized.", "danger")
             return redirect(url_for("admin_system_reset"))
 
-        if keep_default_admin:
-            default_admin = User.query.filter_by(email=default_admin_email).first()
-            if not default_admin:
-                default_admin = User(email=default_admin_email, role=UserRole.ADMIN)
-                default_admin.set_password("admin123")
-                db.session.add(default_admin)
-            default_admin.role = UserRole.ADMIN
-            default_admin.otp_verified = True
-            default_admin.approval_status = APPROVAL_APPROVED
-            default_admin.approval_requested_at = datetime.utcnow()
-            default_admin.approved_at = datetime.utcnow()
-            default_admin.approved_by_user_id = None
-            default_admin.approval_notes = "Default admin retained after reset."
-            default_admin.is_active = True
-            db.session.commit()
+        delete_profile_photo_files(photo_paths)
 
         if keep_default_admin:
             flash(
                 "System reset complete. Default admin account was retained.",
                 "success",
             )
+            retained_admin = User.query.filter_by(email=default_admin_email).first()
+            if retained_admin and bool(getattr(retained_admin, "must_change_password", False)):
+                flash(
+                    "The retained default admin account is using the bootstrap password and must change it after sign-in.",
+                    "warning",
+                )
         else:
             flash("System reset complete. All accounts and records were cleared.", "success")
 
@@ -3202,8 +3643,10 @@ def admin_system_reset():
             logout_user()
             clear_active_session()
             clear_otp_context()
+            clear_email_verification_context()
             flash("You were signed out after reset. Please sign in again.", "info")
-            return redirect(url_for("index"))
+            response = redirect(url_for("index"))
+            return clear_auth_token(response)
 
         return redirect(url_for("admin_system_reset"))
 
@@ -3994,11 +4437,15 @@ def admin_edit_alumni(alumni_id):
 def admin_delete_alumni(alumni_id):
     profile = AlumniProfile.query.get_or_404(alumni_id)
     user = profile.user
-    db.session.delete(profile)
+    photo_paths = collect_profile_photo_paths(profile)
     if user and to_role_slug(user.role, default="alumni") == "alumni":
-        db.session.delete(user)
-    db.session.commit()
-    flash("Alumni deleted.", "success")
+        photo_paths = delete_user_account(user)
+    else:
+        db.session.delete(profile)
+
+    if safe_commit("Unable to delete alumni record right now."):
+        delete_profile_photo_files(photo_paths)
+        flash("Alumni deleted.", "success")
     return redirect(url_for("admin_alumni"))
 
 
@@ -4318,7 +4765,13 @@ def admin_delete_event(event_id):
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
+        email = clean_text(request.form.get("email")).lower()
+        if not email:
+            flash("Email is required.", "danger")
+            return render_template("forgot_password.html")
+        if not is_valid_email(email):
+            flash("Please provide a valid email address.", "danger")
+            return render_template("forgot_password.html")
         user = User.query.filter_by(email=email).first()
         if user:
             token = secrets.token_urlsafe(32)
@@ -4424,7 +4877,8 @@ def reset_password_dashboard():
         clear_otp_context()
         clear_email_verification_context()
         flash("Password reset successfully. Please sign in with your new password.", "success")
-        return redirect(role_login_url(role_slug))
+        response = redirect(role_login_url(role_slug))
+        return clear_auth_token(response)
 
     return render_template(
         "reset_password_dashboard.html",
@@ -4451,6 +4905,9 @@ def reset_password(token):
         confirm_password = request.form.get("confirm_password", "")
         if password != confirm_password:
             flash("Passwords do not match.", "danger")
+            return render_template("reset_password.html", token=token, role_slug=target_role)
+        if len(password) < 8:
+            flash("Password must be at least 8 characters long.", "danger")
             return render_template("reset_password.html", token=token, role_slug=target_role)
 
         target_user.set_password(password)
@@ -4489,20 +4946,23 @@ def admin_bulk_delete_users():
         return redirect(url_for("admin_password_management"))
 
     deletable_count = 0
+    photo_paths = []
     for user_id in ids:
         user = db.session.get(User, user_id)
         # Keep this safe: bulk-delete only alumni accounts.
         if user and to_role_slug(user.role) == "alumni":
-            profile = user.profile
-            if profile:
-                db.session.delete(profile)
-            db.session.delete(user)
+            photo_paths.extend(delete_user_account(user))
             deletable_count += 1
 
+    if deletable_count == 0:
+        flash("Selected accounts were not eligible for deletion.", "warning")
+        return redirect(url_for("admin_password_management"))
+
     if safe_commit(f"Failed to delete {deletable_count} selected alumni accounts."):
+        delete_profile_photo_files(photo_paths)
         flash(f"Successfully deleted {deletable_count} alumni accounts.", "success")
     else:
-        flash("Some deletions failed safely.", "warning")
+        flash("No accounts were deleted. Existing data was left unchanged.", "warning")
 
     return redirect(url_for("admin_password_management"))
 
@@ -4544,9 +5004,9 @@ def safe_db_init():
             fix_invalid_roles()
             seed_users()
             ensure_user_approval_integrity()
-            print("✅ Database tables initialized successfully")
+            print("Database tables initialized successfully")
         except Exception as e:
-            print(f"⚠️  Database init warning (non-fatal): {e}")
+            print(f"Database init warning (non-fatal): {e}")
             print("App will continue - manual DB setup may be needed")
 
 

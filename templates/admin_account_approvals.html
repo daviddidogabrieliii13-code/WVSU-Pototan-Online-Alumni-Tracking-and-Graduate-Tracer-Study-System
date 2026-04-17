@@ -15,7 +15,7 @@
             <div class="portal-tag">Pending: {{ pending_count }}</div>
         </div>
 
-        <div class="table-container" style="margin-bottom: var(--space-md);">
+        <div class="table-container mb-3">
             <form method="GET" action="{{ url_for('admin_account_approvals') }}" class="filter-form">
                 <select name="status" class="form-control">
                     <option value="" {% if not status_filter %}selected{% endif %}>All statuses</option>
@@ -60,12 +60,12 @@
                         <td>{{ user.approved_at.strftime('%Y-%m-%d %H:%M') if user.approved_at else 'N/A' }}</td>
                         <td>{{ user.approval_notes or '-' }}</td>
                         <td class="table-actions">
-                            <form method="POST" action="{{ url_for('admin_approve_account', user_id=user.id) }}" style="display:inline;">
+                            <form method="POST" action="{{ url_for('admin_approve_account', user_id=user.id) }}" class="inline-form">
                                 <button type="submit" class="btn btn-sm btn-primary" {% if user.approval_status == 'approved' %}disabled{% endif %}>
                                     <i class="fas fa-check"></i>
                                 </button>
                             </form>
-                            <form method="POST" action="{{ url_for('admin_reject_account', user_id=user.id) }}" style="display:inline;">
+                            <form method="POST" action="{{ url_for('admin_reject_account', user_id=user.id) }}" class="inline-form">
                                 <button type="submit" class="btn btn-sm btn-danger" {% if user.approval_status == 'rejected' %}disabled{% endif %}>
                                     <i class="fas fa-times"></i>
                                 </button>

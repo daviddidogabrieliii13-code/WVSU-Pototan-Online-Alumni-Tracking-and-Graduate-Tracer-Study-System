@@ -274,30 +274,46 @@
     }
 
     function initOtpCountdown() {
-        const countdown = document.getElementById("otpCountdown");
-        if (!countdown) {
+        const countdownItems = Array.from(
+            document.querySelectorAll("#otpCountdown, .countdown-text")
+        );
+        if (!countdownItems.length) {
             return;
         }
-        let seconds = parseInt(countdown.dataset.seconds, 10);
-        if (Number.isNaN(seconds) || seconds < 0) {
-            seconds = 0;
-        }
 
-        function tick() {
-            countdown.textContent = String(seconds);
-            if (seconds <= 0) {
-                return;
+        countdownItems.forEach(function (countdown) {
+            let seconds = parseInt(countdown.dataset.seconds, 10);
+            if (Number.isNaN(seconds) || seconds < 0) {
+                seconds = 0;
             }
-            seconds -= 1;
-            window.setTimeout(tick, 1000);
-        }
 
-        tick();
+            function render() {
+                if (countdown.dataset.countdownTemplate) {
+                    countdown.textContent = countdown.dataset.countdownTemplate.replace(
+                        "{n}",
+                        String(seconds)
+                    );
+                    return;
+                }
+                countdown.textContent = String(seconds);
+            }
+
+            function tick() {
+                render();
+                if (seconds <= 0) {
+                    return;
+                }
+                seconds -= 1;
+                window.setTimeout(tick, 1000);
+            }
+
+            tick();
+        });
     }
 
     function initOtpInput() {
-        const otpInput = document.querySelector(".otp-input");
-        if (!otpInput) {
+        const otpFields = document.querySelectorAll("[data-otp-field]");
+        if (!otpFields.length) {
             return;
         }
 
@@ -305,20 +321,204 @@
             return value.replace(/\D/g, "").slice(0, 6);
         }
 
-        otpInput.value = sanitizeOtp(otpInput.value || "");
-
-        otpInput.addEventListener("input", function () {
-            otpInput.value = sanitizeOtp(otpInput.value || "");
-        });
-
-        otpInput.addEventListener("paste", function (event) {
-            const pastedText = (event.clipboardData || window.clipboardData).getData("text");
-            const sanitized = sanitizeOtp(pastedText || "");
-            if (!sanitized) {
+        otpFields.forEach(function (otpField) {
+            const otpInput = otpField.querySelector(".otp-input-master");
+            const slotInputs = Array.from(otpField.querySelectorAll("[data-otp-slot]"));
+            if (!otpInput || !slotInputs.length) {
                 return;
             }
-            event.preventDefault();
-            otpInput.value = sanitized;
+
+            otpField.classList.add("otp-enhanced");
+
+            function syncSlotsFromValue(value) {
+                const normalized = sanitizeOtp(value || "");
+                slotInputs.forEach(function (slot, index) {
+                    slot.value = normalized.charAt(index) || "";
+                });
+                otpInput.value = normalized;
+            }
+
+            function syncValueFromSlots() {
+                otpInput.value = slotInputs.map(function (slot) {
+                    return sanitizeOtp(slot.value || "");
+                }).join("");
+            }
+
+            otpInput.value = sanitizeOtp(otpInput.value || "");
+            syncSlotsFromValue(otpInput.value);
+
+            slotInputs.forEach(function (slot, index) {
+                slot.addEventListener("focus", function () {
+                    slot.select();
+                });
+
+                slot.addEventListener("input", function () {
+                    const sanitized = sanitizeOtp(slot.value || "");
+                    if (!sanitized) {
+                        slot.value = "";
+                        syncValueFromSlots();
+                        return;
+                    }
+
+                    if (sanitized.length > 1) {
+                        syncSlotsFromValue(sanitized);
+                        const nextFocus = slotInputs[Math.min(5, sanitized.length - 1)];
+                        if (nextFocus) {
+                            nextFocus.focus();
+                        }
+                        return;
+                    }
+
+                    slot.value = sanitized;
+                    syncValueFromSlots();
+                    if (index < slotInputs.length - 1) {
+                        slotInputs[index + 1].focus();
+                    }
+                });
+
+                slot.addEventListener("keydown", function (event) {
+                    if (event.key === "Backspace" && !slot.value && index > 0) {
+                        slotInputs[index - 1].focus();
+                        slotInputs[index - 1].value = "";
+                        syncValueFromSlots();
+                        event.preventDefault();
+                    }
+                });
+
+                slot.addEventListener("paste", function (event) {
+                    const pastedText = (event.clipboardData || window.clipboardData).getData("text");
+                    const sanitized = sanitizeOtp(pastedText || "");
+                    if (!sanitized) {
+                        return;
+                    }
+                    event.preventDefault();
+                    syncSlotsFromValue(sanitized);
+                    const focusTarget = slotInputs[
+                        Math.min(slotInputs.length - 1, Math.max(0, sanitized.length - 1))
+                    ];
+                    if (focusTarget) {
+                        focusTarget.focus();
+                    }
+                });
+            });
+
+            otpInput.addEventListener("input", function () {
+                syncSlotsFromValue(otpInput.value || "");
+            });
+
+            const parentForm = otpInput.closest("form");
+            if (parentForm) {
+                parentForm.addEventListener("submit", function () {
+                    syncValueFromSlots();
+                });
+            }
+        });
+    }
+
+    function initFormLoadingStates() {
+        const forms = document.querySelectorAll("form.needs-validation, form[data-loading-form]");
+        if (!forms.length) {
+            return;
+        }
+
+        forms.forEach(function (form) {
+            form.addEventListener("submit", function (event) {
+                if (form.dataset.submitting === "true") {
+                    event.preventDefault();
+                    return;
+                }
+
+                if (typeof form.checkValidity === "function" && !form.checkValidity()) {
+                    return;
+                }
+
+                form.dataset.submitting = "true";
+
+                const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+                submitButtons.forEach(function (button) {
+                    if (button.disabled) {
+                        return;
+                    }
+
+                    button.disabled = true;
+                    button.setAttribute("aria-busy", "true");
+                    button.classList.add("is-loading");
+
+                    const loadingText = button.dataset.loadingText || "Please wait...";
+                    if (button.tagName === "BUTTON") {
+                        if (!button.dataset.originalHtml) {
+                            button.dataset.originalHtml = button.innerHTML;
+                        }
+                        button.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span>' + loadingText + "</span>";
+                        return;
+                    }
+
+                    if (!button.dataset.originalValue) {
+                        button.dataset.originalValue = button.value;
+                    }
+                    button.value = loadingText;
+                });
+            });
+        });
+    }
+
+    function copyTextToClipboard(value) {
+        if (!value) {
+            return Promise.resolve(false);
+        }
+
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(value).then(function () {
+                return true;
+            }).catch(function () {
+                return false;
+            });
+        }
+
+        const textArea = document.createElement("textarea");
+        textArea.value = value;
+        textArea.setAttribute("readonly", "readonly");
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.select();
+
+        let copied = false;
+        try {
+            copied = document.execCommand("copy");
+        } catch (_error) {
+            copied = false;
+        }
+
+        document.body.removeChild(textArea);
+        return Promise.resolve(copied);
+    }
+
+    function initCopyTargets() {
+        const copyTargets = document.querySelectorAll(".copy-target");
+        if (!copyTargets.length) {
+            return;
+        }
+
+        copyTargets.forEach(function (target) {
+            if (!target.dataset.copyState) {
+                target.dataset.copyState = "Copy";
+            }
+
+            target.addEventListener("click", function (event) {
+                const clickedLink = event.target.closest("a");
+                if (clickedLink && clickedLink.getAttribute("href")) {
+                    return;
+                }
+
+                const textToCopy = (target.dataset.copyText || target.textContent || "").trim();
+                copyTextToClipboard(textToCopy).then(function (copied) {
+                    target.dataset.copyState = copied ? "Copied" : "Failed";
+                    window.setTimeout(function () {
+                        target.dataset.copyState = "Copy";
+                    }, 1600);
+                });
+            });
         });
     }
 
@@ -537,6 +737,8 @@
         initSmoothAnchors();
         initOtpCountdown();
         initOtpInput();
+        initFormLoadingStates();
+        initCopyTargets();
         initCharts();
         initDegreeOtherFields();
         initAlumniModuleStepper();

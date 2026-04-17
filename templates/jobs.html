@@ -10,7 +10,7 @@
     </div>
 </div>
 
-<div class="container" style="padding-bottom: var(--space-xxl);">
+<div class="container page-bottom">
     <!-- Filters -->
     <div class="job-filters">
         <form method="GET" action="{{ url_for('jobs') }}" class="filter-form">
@@ -61,9 +61,9 @@
                 </div>
             </div>
             
-            <p style="color: var(--text-secondary); margin-bottom: var(--space-md);">{{ job.description[:200] }}...</p>
+            <p class="job-card-summary">{{ job.description[:200] }}...</p>
             
-            <div style="display: flex; gap: var(--space-md);">
+            <div class="job-card-actions">
                 <a href="{{ url_for('job_detail', job_id=job.id) }}" class="btn btn-outline btn-sm">
                     <i class="fas fa-eye"></i> View Details
                 </a>

@@ -12,12 +12,12 @@
     </div>
 </div>
 
-<div class="container" style="padding-bottom: var(--space-xxl);">
+<div class="container page-bottom">
     <div class="survey-container">
         <div class="survey-progress">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="survey-progress-head">
                 <h3><i class="fas fa-clipboard-check"></i> Survey Progress</h3>
-                <span style="font-weight: 600; color: var(--primary);">Complete all sections</span>
+                <span class="survey-progress-label">Complete all sections</span>
             </div>
             <div class="survey-progress-bar">
                 <div class="survey-progress-fill" style="width: 0%;"></div>
@@ -39,7 +39,7 @@
                         <label for="eq{{ i }}" class="rating-label">{{ i }}</label>
                         {% endfor %}
                     </div>
-                    <small style="color: var(--text-secondary);">1 = Poor, 5 = Excellent</small>
+                    <small class="survey-help-text">1 = Poor, 5 = Excellent</small>
                 </div>
                 
                 <div class="survey-question">
@@ -148,7 +148,7 @@
                 
                 <div class="survey-question">
                     <label class="survey-question-label">11. Are you currently employed?</label>
-                    <div style="display: flex; gap: var(--space-lg); margin-top: var(--space-sm);">
+                    <div class="survey-choice-row">
                         <div class="form-check">
                             <input type="radio" name="is_employed" id="employed_yes" value="yes" class="form-check-input">
                             <label class="form-check-label" for="employed_yes">Yes</label>
@@ -162,7 +162,7 @@
                 
                 <div class="survey-question">
                     <label class="survey-question-label">12. Is your current job related to your course?</label>
-                    <div style="display: flex; gap: var(--space-lg); margin-top: var(--space-sm);">
+                    <div class="survey-choice-row">
                         <div class="form-check">
                             <input type="radio" name="job_related" id="related_yes" value="yes" class="form-check-input">
                             <label class="form-check-label" for="related_yes">Yes</label>
@@ -176,7 +176,7 @@
                 
                 <div class="survey-question">
                     <label class="survey-question-label">13. Are you currently looking for a job?</label>
-                    <div style="display: flex; gap: var(--space-lg); margin-top: var(--space-sm);">
+                    <div class="survey-choice-row">
                         <div class="form-check">
                             <input type="radio" name="job_searching" id="searching_yes" value="yes" class="form-check-input">
                             <label class="form-check-label" for="searching_yes">Yes</label>
@@ -190,7 +190,7 @@
                 
                 <div class="survey-question">
                     <label class="survey-question-label">14. What sector are you currently working in?</label>
-                    <select name="employment_sector" class="form-control" style="margin-top: var(--space-sm);">
+                    <select name="employment_sector" class="form-control survey-select-spaced">
                         <option value="">Select sector</option>
                         <option value="government">Government</option>
                         <option value="private">Private Company</option>
@@ -237,7 +237,7 @@
                 </div>
             </div>
 
-            <div style="text-align: center;">
+            <div class="survey-submit-row">
                 <button type="submit" class="btn btn-primary btn-lg">
                     <i class="fas fa-paper-plane"></i> Submit Survey
                 </button>
