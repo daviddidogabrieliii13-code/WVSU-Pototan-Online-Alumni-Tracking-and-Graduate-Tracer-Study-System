@@ -3,8 +3,12 @@
 {% block title %}Director Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <div class="container">
+<div class="dashboard-layout">
+    <aside class="sidebar">
+        {% include '_sidebar_nav_sections.html' %}
+    </aside>
+
+    <main class="main-content">
         <section class="portal-hero" data-portal="director">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
@@ -72,7 +76,7 @@
                 </div>
                 <p class="portal-card-desc">Export employment reports for presentation and planning.</p>
                 <div class="portal-card-actions">
-                    <a href="#" class="btn btn-primary btn-sm">Generate Report</a>
+                    <a href="{{ url_for('analytics') }}" class="btn btn-primary btn-sm">Open Analytics</a>
                 </div>
             </article>
             
@@ -88,10 +92,12 @@
                 </div>
                 <p class="portal-card-desc">Compare outcomes and engagement by course or cohort.</p>
                 <div class="portal-card-actions">
-                    <a href="#" class="btn btn-primary btn-sm">View Reports</a>
+                    <a href="{{ url_for('analytics') }}" class="btn btn-primary btn-sm">View Trends</a>
                 </div>
             </article>
         </div>
-    </div>
+
+        {% include '_dashboard_notifications.html' %}
+    </main>
 </div>
 {% endblock %}

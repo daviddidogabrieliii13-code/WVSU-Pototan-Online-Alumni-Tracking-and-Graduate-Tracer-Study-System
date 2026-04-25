@@ -3,6 +3,7 @@ import io
 import re
 from datetime import datetime
 from functools import wraps
+from types import SimpleNamespace
 
 from flask import Blueprint, Response, jsonify, request
 from flask_login import current_user
@@ -351,7 +352,24 @@ def api_jobs_create():
     commit_error = _safe_commit("Unable to create job.")
     if commit_error:
         return commit_error
-    return jsonify({"success": True, "data": job.to_dict()}), 201
+    from app import dispatch_job_notifications
+
+    dispatch_result = dispatch_job_notifications(
+        job,
+        action="created",
+        source_role=_current_role(),
+        send_email=False,
+    )
+    return (
+        jsonify(
+            {
+                "success": True,
+                "data": job.to_dict(),
+                "notification_dispatch": dispatch_result,
+            }
+        ),
+        201,
+    )
 
 
 @api_bp.route("/jobs/<int:job_id>", methods=["GET"])
@@ -404,18 +422,53 @@ def api_jobs_update(job_id):
     commit_error = _safe_commit("Unable to update job.")
     if commit_error:
         return commit_error
-    return jsonify({"success": True, "data": job.to_dict()}), 200
+    from app import dispatch_job_notifications
+
+    dispatch_result = dispatch_job_notifications(
+        job,
+        action="updated",
+        source_role=_current_role(),
+        send_email=False,
+    )
+    return (
+        jsonify(
+            {
+                "success": True,
+                "data": job.to_dict(),
+                "notification_dispatch": dispatch_result,
+            }
+        ),
+        200,
+    )
 
 
 @api_bp.route("/jobs/<int:job_id>", methods=["DELETE"])
 @_roles_required("admin")
 def api_jobs_delete(job_id):
     job = Job.query.get_or_404(job_id)
+    job_snapshot = SimpleNamespace(title=job.title, company=job.company)
     db.session.delete(job)
     commit_error = _safe_commit("Unable to delete job.")
     if commit_error:
         return commit_error
-    return jsonify({"success": True, "message": "Job deleted."}), 200
+    from app import dispatch_job_notifications
+
+    dispatch_result = dispatch_job_notifications(
+        job_snapshot,
+        action="deleted",
+        source_role=_current_role(),
+        send_email=False,
+    )
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "Job deleted.",
+                "notification_dispatch": dispatch_result,
+            }
+        ),
+        200,
+    )
 
 
 @api_bp.route("/events", methods=["GET"])
@@ -472,7 +525,24 @@ def api_events_create():
     commit_error = _safe_commit("Unable to create event.")
     if commit_error:
         return commit_error
-    return jsonify({"success": True, "data": event.to_dict()}), 201
+    from app import dispatch_event_notifications
+
+    dispatch_result = dispatch_event_notifications(
+        event,
+        action="created",
+        source_role=_current_role(),
+        send_email=False,
+    )
+    return (
+        jsonify(
+            {
+                "success": True,
+                "data": event.to_dict(),
+                "notification_dispatch": dispatch_result,
+            }
+        ),
+        201,
+    )
 
 
 @api_bp.route("/events/<int:event_id>", methods=["GET"])
@@ -520,18 +590,53 @@ def api_events_update(event_id):
     commit_error = _safe_commit("Unable to update event.")
     if commit_error:
         return commit_error
-    return jsonify({"success": True, "data": event.to_dict()}), 200
+    from app import dispatch_event_notifications
+
+    dispatch_result = dispatch_event_notifications(
+        event,
+        action="updated",
+        source_role=_current_role(),
+        send_email=False,
+    )
+    return (
+        jsonify(
+            {
+                "success": True,
+                "data": event.to_dict(),
+                "notification_dispatch": dispatch_result,
+            }
+        ),
+        200,
+    )
 
 
 @api_bp.route("/events/<int:event_id>", methods=["DELETE"])
 @_roles_required("admin", "osa")
 def api_events_delete(event_id):
     event = Event.query.get_or_404(event_id)
+    event_snapshot = SimpleNamespace(title=event.title)
     db.session.delete(event)
     commit_error = _safe_commit("Unable to delete event.")
     if commit_error:
         return commit_error
-    return jsonify({"success": True, "message": "Event deleted."}), 200
+    from app import dispatch_event_notifications
+
+    dispatch_result = dispatch_event_notifications(
+        event_snapshot,
+        action="deleted",
+        source_role=_current_role(),
+        send_email=False,
+    )
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "Event deleted.",
+                "notification_dispatch": dispatch_result,
+            }
+        ),
+        200,
+    )
 
 
 @api_bp.route("/notifications", methods=["GET"])

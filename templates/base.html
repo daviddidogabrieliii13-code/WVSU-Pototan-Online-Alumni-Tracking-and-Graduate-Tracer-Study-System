@@ -63,45 +63,16 @@
                             {{ role_portals[current_role]['label'] if current_role in role_portals else 'Account' }}
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a href="{{ current_dashboard_url }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                            <li><a href="{{ url_for('reset_password_dashboard') }}"><i class="fas fa-key"></i> Change Password</a></li>
-                            <li>
-                                <a href="{{ url_for('notifications') }}">
-                                    <i class="fas fa-bell"></i>
-                                    Notifications{% if unread_notifications_count %} ({{ unread_notifications_count }}){% endif %}
-                                </a>
-                            </li>
-
-                            {% if current_role == 'alumni' %}
-                                <li><a href="{{ url_for('alumni_module_dashboard') }}"><i class="fas fa-layer-group"></i> Alumni Module</a></li>
-                                <li><a href="{{ url_for('alumni_module_form') }}"><i class="fas fa-id-card"></i> 4-Part Form</a></li>
-                                <li><a href="{{ url_for('profile') }}"><i class="fas fa-user"></i> My Profile</a></li>
-                                <li><a href="{{ url_for('alumni_module_profile') }}"><i class="fas fa-address-card"></i> Profile View</a></li>
-                                <li><a href="{{ url_for('survey') }}"><i class="fas fa-poll"></i> Tracer Survey</a></li>
-                                <li><a href="{{ url_for('my_survey') }}"><i class="fas fa-file-alt"></i> My Survey</a></li>
-                            {% elif current_role == 'admin' %}
-                                <li><a href="{{ url_for('analytics') }}"><i class="fas fa-chart-bar"></i> Analytics</a></li>
-                                <li><a href="{{ url_for('admin_alumni') }}"><i class="fas fa-users"></i> Alumni</a></li>
-                                <li><a href="{{ url_for('admin_jobs') }}"><i class="fas fa-briefcase"></i> Jobs</a></li>
-                                <li><a href="{{ url_for('admin_events') }}"><i class="fas fa-calendar"></i> Events</a></li>
-                                <li><a href="{{ url_for('admin_exports') }}"><i class="fas fa-file-export"></i> Data Exports</a></li>
-                                <li><a href="{{ url_for('admin_password_management') }}"><i class="fas fa-user-lock"></i> Password Management</a></li>
-                                <li><a href="{{ url_for('admin_event_rsvp_analytics') }}"><i class="fas fa-user-check"></i> RSVP Analytics</a></li>
-                                <li><a href="{{ url_for('admin_account_approvals') }}"><i class="fas fa-user-clock"></i> Account Approvals</a></li>
-                                <li><a href="{{ url_for('admin_surveys') }}"><i class="fas fa-poll"></i> Surveys</a></li>
-                                <li><a href="{{ url_for('admin_system_reset') }}"><i class="fas fa-database"></i> System Reset</a></li>
-                            {% elif current_role == 'director' %}
-                                <li><a href="{{ url_for('analytics') }}"><i class="fas fa-chart-line"></i> Analytics</a></li>
-                                <li><a href="{{ url_for('admin_surveys') }}"><i class="fas fa-poll"></i> Survey Insights</a></li>
-                            {% elif current_role == 'registrar' %}
-                                <li><a href="{{ url_for('admin_alumni') }}"><i class="fas fa-id-card"></i> Alumni Records</a></li>
-                            {% elif current_role == 'osa' %}
-                                <li><a href="{{ url_for('admin_events') }}"><i class="fas fa-calendar-check"></i> Events</a></li>
-                                <li><a href="{{ url_for('admin_exports') }}"><i class="fas fa-file-export"></i> Event Exports</a></li>
-                                <li><a href="{{ url_for('admin_event_rsvp_analytics') }}"><i class="fas fa-user-check"></i> RSVP Analytics</a></li>
-                            {% endif %}
-
-                            <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                            {% for section in current_portal_navigation %}
+                                {% for item in section["items"] %}
+                                <li>
+                                    <a href="{{ nav_url(item) }}">
+                                        <i class="{{ item.icon }}"></i>
+                                        {{ item.label }}{% if item.endpoint == 'notifications' and unread_notifications_count %} ({{ unread_notifications_count }}){% endif %}
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            {% endfor %}
                         </ul>
                     </li>
                 {% else %}

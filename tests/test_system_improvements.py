@@ -16,7 +16,15 @@ os.environ["MAIL_PASSWORD"] = ""
 os.environ["GMAIL_APP_PASSWORD"] = ""
 
 import app as app_module
-from models import AlumniProfile, EmailVerificationToken, PasswordReset, User, UserRole
+from models import (
+    AlumniProfile,
+    EmailVerificationToken,
+    Event,
+    Notification,
+    PasswordReset,
+    User,
+    UserRole,
+)
 
 
 class SystemImprovementsTestCase(unittest.TestCase):
@@ -71,13 +79,53 @@ class SystemImprovementsTestCase(unittest.TestCase):
         )
         alumni.set_password("Alumni123!")
 
-        app_module.db.session.add_all([admin, alumni])
+        director = User(
+            email="director@wvsu.edu.ph",
+            role=UserRole.DIRECTOR,
+            otp_verified=True,
+            email_verified=True,
+            email_verified_at=datetime.utcnow(),
+            is_active=True,
+            approval_status="approved",
+            approval_requested_at=datetime.utcnow(),
+            approved_at=datetime.utcnow(),
+        )
+        director.set_password("Director123!")
+
+        registrar = User(
+            email="registrar@wvsu.edu.ph",
+            role=UserRole.REGISTRAR,
+            otp_verified=True,
+            email_verified=True,
+            email_verified_at=datetime.utcnow(),
+            is_active=True,
+            approval_status="approved",
+            approval_requested_at=datetime.utcnow(),
+            approved_at=datetime.utcnow(),
+        )
+        registrar.set_password("Registrar123!")
+
+        osa = User(
+            email="osa@wvsu.edu.ph",
+            role=UserRole.OSA,
+            otp_verified=True,
+            email_verified=True,
+            email_verified_at=datetime.utcnow(),
+            is_active=True,
+            approval_status="approved",
+            approval_requested_at=datetime.utcnow(),
+            approved_at=datetime.utcnow(),
+        )
+        osa.set_password("Osa12345!")
+
+        app_module.db.session.add_all([admin, alumni, director, registrar, osa])
         app_module.db.session.flush()
 
         profile = AlumniProfile(
             user_id=alumni.id,
             first_name="Test",
             last_name="Alumni",
+            student_id="2024-0001",
             degree="Bachelor of Science in Information Technology (BSIT)",
             year_graduated=2024,
             profile_photo="uploads/profile_photos/test-cleanup-photo.jpg",
@@ -160,6 +208,93 @@ class SystemImprovementsTestCase(unittest.TestCase):
 
     def test_missing_smtp_credentials_use_mock_delivery(self):
         self.assertTrue(app_module.should_mock_email_delivery())
+
+    def test_job_creation_dispatches_notifications_to_all_roles(self):
+        self._login_as(self.admin_id)
+
+        response = self.client.post(
+            "/admin/jobs/add",
+            data={
+                "title": "Backend Developer",
+                "company": "WVSU Tech Hub",
+                "location": "Iloilo",
+                "job_type": "full-time",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Job created.", response.data)
+
+        with self.app.app_context():
+            notifications = Notification.query.order_by(Notification.user_id.asc()).all()
+            self.assertEqual(len(notifications), 5)
+            self.assertEqual({item.source_role for item in notifications}, {"admin"})
+            self.assertEqual({item.notification_type for item in notifications}, {"job"})
+            self.assertEqual(
+                {item.user.role.value for item in notifications},
+                {"admin", "alumni", "director", "registrar", "osa"},
+            )
+
+    def test_api_event_update_dispatches_notifications_to_all_roles(self):
+        with self.app.app_context():
+            event = Event(
+                title="Alumni Homecoming",
+                event_date=datetime.utcnow() + timedelta(days=14),
+                location="Pototan",
+                is_published=True,
+            )
+            app_module.db.session.add(event)
+            app_module.db.session.commit()
+            event_id = event.id
+
+        self._login_as(self.admin_id)
+        response = self.client.put(
+            f"/api/v1/events/{event_id}",
+            json={
+                "title": "Alumni Homecoming 2026",
+                "event_date": (datetime.utcnow() + timedelta(days=21)).strftime("%Y-%m-%dT%H:%M"),
+                "location": "Pototan Campus Gymnasium",
+                "is_published": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["notification_dispatch"]["created"], 5)
+
+        with self.app.app_context():
+            notifications = Notification.query.order_by(Notification.user_id.asc()).all()
+            self.assertEqual(len(notifications), 5)
+            self.assertEqual({item.source_role for item in notifications}, {"admin"})
+            self.assertEqual({item.notification_type for item in notifications}, {"event"})
+            self.assertIn("updated", notifications[0].title.lower())
+
+    def test_admin_navigation_renders_shared_notification_and_export_links(self):
+        self._login_as(self.admin_id)
+
+        response = self.client.get("/admin/password-management")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Notifications", response.data)
+        self.assertIn(b"Data Exports", response.data)
+
+    def test_admin_dashboard_password_card_uses_real_reset_route(self):
+        self._login_as(self.admin_id)
+
+        response = self.client.get("/portal/admin/dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"/reset-password", response.data)
+        self.assertNotIn(b"openChangePasswordModal", response.data)
+
+    def test_admin_alumni_search_matches_student_id(self):
+        self._login_as(self.admin_id)
+
+        response = self.client.get("/admin/alumni?search=2024-0001")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Test", response.data)
 
 
 if __name__ == "__main__":

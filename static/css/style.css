@@ -4463,6 +4463,13 @@ button:disabled {
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
+.notification-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
 .notification-card--unread {
     border-color: rgba(47, 111, 201, 0.45);
     box-shadow: var(--ui-shadow), 0 0 0 1px rgba(47, 111, 201, 0.12);
@@ -4478,6 +4485,27 @@ button:disabled {
 
 .notification-message {
     margin: 0;
+}
+
+.dashboard-notification-panel {
+    margin-top: 1.5rem;
+}
+
+.dashboard-notification-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.sidebar-inline-badge {
+    margin-left: auto;
+    min-width: 1.6rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(47, 111, 201, 0.14);
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
 }
 
 :root[data-theme="dark"] .otp-demo-card {
@@ -4514,6 +4542,11 @@ button:disabled {
 :root[data-theme="dark"] .dashboard-event-item {
     background: rgba(127, 177, 255, 0.06);
     border-color: rgba(127, 177, 255, 0.2);
+}
+
+:root[data-theme="dark"] .sidebar-inline-badge {
+    background: rgba(127, 177, 255, 0.14);
+    color: #9acbff;
 }
 
 @media (max-width: 760px) {

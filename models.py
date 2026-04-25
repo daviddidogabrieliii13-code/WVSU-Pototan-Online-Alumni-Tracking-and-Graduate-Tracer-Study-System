@@ -399,6 +399,7 @@ class Notification(db.Model):
     title = db.Column(db.String(200), nullable=False)
     message = db.Column(db.Text)
     notification_type = db.Column(db.String(50))
+    source_role = db.Column(db.String(50), nullable=False, default="system")
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -409,6 +410,7 @@ class Notification(db.Model):
             "title": self.title,
             "message": self.message,
             "notification_type": self.notification_type,
+            "source_role": self.source_role,
             "is_read": bool(self.is_read),
             "created_at": _iso(self.created_at),
         }

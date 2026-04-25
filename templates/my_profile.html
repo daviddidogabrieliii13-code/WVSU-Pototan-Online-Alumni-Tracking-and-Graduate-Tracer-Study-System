@@ -5,30 +5,7 @@
 {% block content %}
 <div class="dashboard-layout">
     <div class="sidebar">
-        <div class="sidebar-menu">
-            <h4>Menu</h4>
-            <a href="{{ url_for('dashboard') }}" class="sidebar-link">
-                <i class="fas fa-tachometer-alt"></i> Dashboard
-            </a>
-            <a href="{{ url_for('my_profile') }}" class="sidebar-link active">
-                <i class="fas fa-user"></i> My Profile
-            </a>
-            <a href="{{ url_for('profile') }}" class="sidebar-link">
-                <i class="fas fa-edit"></i> Edit Profile
-            </a>
-            <a href="{{ url_for('alumni_module_form') }}" class="sidebar-link">
-                <i class="fas fa-id-card"></i> 4-Part Form
-            </a>
-            <a href="{{ url_for('my_survey') }}" class="sidebar-link">
-                <i class="fas fa-poll"></i> My Survey
-            </a>
-        </div>
-        <div class="sidebar-menu">
-            <h4>Account</h4>
-            <a href="{{ url_for('logout') }}" class="sidebar-link">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
-        </div>
+        {% include '_sidebar_nav_sections.html' %}
     </div>
     
     <div class="main-content">
@@ -180,6 +157,8 @@
         <a href="{{ url_for('profile') }}" class="btn btn-primary">
             <i class="fas fa-edit"></i> Edit My Profile
         </a>
+
+        {% include '_dashboard_notifications.html' %}
     </div>
 </div>
 {% endblock %}

@@ -4,29 +4,8 @@
 
 {% block content %}
 <div class="dashboard-layout">
-    <!-- Sidebar -->
     <aside class="sidebar">
-        <div class="sidebar-menu">
-            <h4>Menu</h4>
-            <a href="{{ url_for('dashboard') }}" class="sidebar-link active">
-                <i class="fas fa-tachometer-alt"></i> Dashboard
-            </a>
-            <a href="{{ url_for('profile') }}" class="sidebar-link">
-                <i class="fas fa-user"></i> My Profile
-            </a>
-            <a href="{{ url_for('survey') }}" class="sidebar-link">
-                <i class="fas fa-poll"></i> Survey
-            </a>
-            <a href="{{ url_for('jobs') }}" class="sidebar-link">
-                <i class="fas fa-briefcase"></i> Jobs
-            </a>
-            <a href="{{ url_for('events') }}" class="sidebar-link">
-                <i class="fas fa-calendar-alt"></i> Events
-            </a>
-            <a href="{{ url_for('alumni_directory') }}" class="sidebar-link">
-                <i class="fas fa-users"></i> Alumni
-            </a>
-        </div>
+        {% include '_sidebar_nav_sections.html' %}
         
         <div class="sidebar-profile">
             <div class="sidebar-avatar">
@@ -211,6 +190,8 @@
             </div>
         </div>
         {% endif %}
+
+        {% include '_dashboard_notifications.html' %}
     </main>
 </div>
 {% endblock %}

@@ -3,8 +3,12 @@
 {% block title %}OSA Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <div class="container">
+<div class="dashboard-layout">
+    <aside class="sidebar">
+        {% include '_sidebar_nav_sections.html' %}
+    </aside>
+
+    <main class="main-content">
         <section class="portal-hero" data-portal="osa">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
@@ -72,7 +76,7 @@
                 </div>
                 <p class="portal-card-desc">Review comments and suggestions from recent events.</p>
                 <div class="portal-card-actions">
-                    <a href="#" class="btn btn-primary btn-sm">View Feedback</a>
+                    <a href="{{ url_for('admin_event_rsvp_analytics') }}" class="btn btn-primary btn-sm">View RSVP Trends</a>
                 </div>
             </article>
             
@@ -88,10 +92,12 @@
                 </div>
                 <p class="portal-card-desc">Track participation rates across events and cohorts.</p>
                 <div class="portal-card-actions">
-                    <a href="#" class="btn btn-primary btn-sm">View Metrics</a>
+                    <a href="{{ url_for('admin_exports') }}" class="btn btn-primary btn-sm">Open Exports</a>
                 </div>
             </article>
         </div>
-    </div>
+
+        {% include '_dashboard_notifications.html' %}
+    </main>
 </div>
 {% endblock %}

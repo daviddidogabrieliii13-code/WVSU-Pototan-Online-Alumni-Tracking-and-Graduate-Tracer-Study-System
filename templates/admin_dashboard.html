@@ -3,8 +3,12 @@
 {% block title %}Admin Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <div class="container">
+<div class="dashboard-layout">
+    <aside class="sidebar">
+        {% include '_sidebar_nav_sections.html' %}
+    </aside>
+
+    <main class="main-content">
         <section class="portal-hero" data-portal="admin">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
@@ -29,7 +33,7 @@
         </section>
         
         <div class="portal-grid">
-            <article class="portal-card password-card" data-accent="security" onclick="openChangePasswordModal()">
+            <article class="portal-card password-card" data-accent="security">
                 <div class="portal-card-header">
                     <div class="portal-card-icon">
                         <i class="fas fa-lock"></i>
@@ -43,9 +47,9 @@
                     <i class="fas fa-shield-alt"></i> Protected Account
                 </div>
                 <div class="portal-card-actions">
-                    <button class="btn btn-primary btn-sm w-100" onclick="event.stopPropagation(); openChangePasswordModal()">
+                    <a href="{{ url_for('reset_password_dashboard') }}" class="btn btn-primary btn-sm w-100">
                         <i class="fas fa-key"></i> Update Password
-                    </button>
+                    </a>
                 </div>
             </article>
 
@@ -161,6 +165,8 @@
                 </div>
             </article>
         </div>
+
+        {% include '_dashboard_notifications.html' %}
         
         <div class="recent-activity">
             <h3>Recent Activity</h3>
@@ -175,7 +181,7 @@
                             {% elif 'event' in log.action %}calendar-alt
                             {% else %}circle{% endif %}"></i>
                         <span>{{ log.action.replace('_', ' ').title() }} by {{ log.user.email if log.user else 'System' }}</span>
-                        <small>{{ log.timestamp.strftime('%-I:%M %p') if log.timestamp else 'Just now' }}
+                        <small>{{ log.timestamp.strftime('%I:%M %p').lstrip('0') if log.timestamp else 'Just now' }}
                             {% if log.ip_address %}(from {{ log.ip_address }}){% endif %}
                         </small>
                     </div>
@@ -188,6 +194,6 @@
                 {% endif %}
             </div>
         </div>
-    </div>
+    </main>
 </div>
 {% endblock %}

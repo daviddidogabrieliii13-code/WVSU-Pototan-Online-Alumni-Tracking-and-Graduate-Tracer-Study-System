@@ -1,0 +1,16 @@
+{% for section in current_portal_navigation %}
+<div class="sidebar-menu">
+    {% if section["title"] %}
+    <h4>{{ section["title"] }}</h4>
+    {% endif %}
+    {% for item in section["items"] %}
+    <a href="{{ nav_url(item) }}" class="sidebar-link {% if nav_is_active(item) %}active{% endif %}">
+        <i class="{{ item.icon }}"></i>
+        <span>{{ item.label }}</span>
+        {% if item.endpoint == 'notifications' and unread_notifications_count %}
+        <span class="sidebar-inline-badge">{{ unread_notifications_count }}</span>
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% endfor %}

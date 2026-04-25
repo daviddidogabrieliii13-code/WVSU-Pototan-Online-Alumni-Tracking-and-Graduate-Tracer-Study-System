@@ -15,6 +15,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from functools import wraps
+from types import SimpleNamespace
 
 from flask import (
     Flask,
@@ -272,6 +273,7 @@ EVENT_TYPE_OPTIONS = {"reunion", "career_fair", "workshop", "gathering"}
 NOTIF_TYPE_JOB = "job"
 NOTIF_TYPE_EVENT = "event"
 NOTIF_TYPE_SYSTEM = "system"
+NOTIF_SOURCE_SYSTEM = "system"
 EMAIL_CONTEXT_SESSION_KEY = "email_verification_context"
 
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
@@ -280,6 +282,350 @@ DEFAULT_AVATAR_FILE = "img/default-avatar.svg"
 CAMPUS_LOGO_FILE = "img/Pototan.jpg"
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 PHONE_PATTERN = re.compile(r"^[0-9+\-()\s]{7,24}$")
+
+PORTAL_NAVIGATION = {
+    "alumni": [
+        {
+            "title": "Portal",
+            "items": [
+                {
+                    "label": "Dashboard",
+                    "icon": "fas fa-home",
+                    "endpoint": "role_dashboard",
+                    "endpoint_kwargs": {"role": "alumni"},
+                    "active_paths": ["/portal/alumni/dashboard", "/dashboard", "/dashboard/overview"],
+                },
+                {
+                    "label": "Notifications",
+                    "icon": "fas fa-bell",
+                    "endpoint": "notifications",
+                    "active_paths": ["/notifications"],
+                    "active_prefixes": ["/notifications/"],
+                },
+                {
+                    "label": "My Profile",
+                    "icon": "fas fa-user",
+                    "endpoint": "my_profile",
+                    "active_paths": ["/my-profile"],
+                },
+                {
+                    "label": "Edit Profile",
+                    "icon": "fas fa-user-edit",
+                    "endpoint": "profile",
+                    "active_paths": ["/profile"],
+                },
+                {
+                    "label": "4-Part Form",
+                    "icon": "fas fa-id-card",
+                    "endpoint": "alumni_module_form",
+                    "active_paths": ["/alumni-module/form"],
+                },
+                {
+                    "label": "Module Dashboard",
+                    "icon": "fas fa-layer-group",
+                    "endpoint": "alumni_module_dashboard",
+                    "active_paths": ["/alumni-module/dashboard"],
+                },
+                {
+                    "label": "Profile View",
+                    "icon": "fas fa-address-card",
+                    "endpoint": "alumni_module_profile",
+                    "active_paths": ["/alumni-module/profile"],
+                },
+                {
+                    "label": "Tracer Survey",
+                    "icon": "fas fa-poll",
+                    "endpoint": "survey",
+                    "active_paths": ["/survey"],
+                },
+                {
+                    "label": "My Survey",
+                    "icon": "fas fa-file-alt",
+                    "endpoint": "my_survey",
+                    "active_paths": ["/my-survey"],
+                },
+                {
+                    "label": "Jobs",
+                    "icon": "fas fa-briefcase",
+                    "endpoint": "jobs",
+                    "active_paths": ["/jobs"],
+                    "active_prefixes": ["/jobs/"],
+                },
+                {
+                    "label": "Events",
+                    "icon": "fas fa-calendar-alt",
+                    "endpoint": "events",
+                    "active_paths": ["/events"],
+                    "active_prefixes": ["/events/"],
+                },
+                {
+                    "label": "Alumni Directory",
+                    "icon": "fas fa-users",
+                    "endpoint": "alumni_directory",
+                    "active_paths": ["/alumni"],
+                },
+            ],
+        },
+        {
+            "title": "Account",
+            "items": [
+                {
+                    "label": "Change Password",
+                    "icon": "fas fa-key",
+                    "endpoint": "reset_password_dashboard",
+                    "active_paths": ["/reset-password"],
+                },
+                {
+                    "label": "Logout",
+                    "icon": "fas fa-sign-out-alt",
+                    "endpoint": "logout",
+                },
+            ],
+        },
+    ],
+    "admin": [
+        {
+            "title": "Portal",
+            "items": [
+                {
+                    "label": "Dashboard",
+                    "icon": "fas fa-home",
+                    "endpoint": "role_dashboard",
+                    "endpoint_kwargs": {"role": "admin"},
+                    "active_paths": ["/portal/admin/dashboard"],
+                },
+                {
+                    "label": "Notifications",
+                    "icon": "fas fa-bell",
+                    "endpoint": "notifications",
+                    "active_paths": ["/notifications"],
+                    "active_prefixes": ["/notifications/"],
+                },
+                {
+                    "label": "Analytics",
+                    "icon": "fas fa-chart-bar",
+                    "endpoint": "analytics",
+                    "active_paths": ["/analytics"],
+                },
+            ],
+        },
+        {
+            "title": "Management",
+            "items": [
+                {
+                    "label": "Alumni",
+                    "icon": "fas fa-users",
+                    "endpoint": "admin_alumni",
+                    "active_paths": ["/admin/alumni"],
+                    "active_prefixes": ["/admin/alumni/edit"],
+                },
+                {
+                    "label": "Jobs",
+                    "icon": "fas fa-briefcase",
+                    "endpoint": "admin_jobs",
+                    "active_paths": ["/admin/jobs"],
+                    "active_prefixes": ["/admin/jobs/add", "/admin/jobs/edit"],
+                },
+                {
+                    "label": "Events",
+                    "icon": "fas fa-calendar",
+                    "endpoint": "admin_events",
+                    "active_paths": ["/admin/events"],
+                    "active_prefixes": ["/admin/events/add", "/admin/events/edit"],
+                },
+                {
+                    "label": "RSVP Analytics",
+                    "icon": "fas fa-user-check",
+                    "endpoint": "admin_event_rsvp_analytics",
+                    "active_paths": ["/admin/events/rsvp-analytics"],
+                },
+                {
+                    "label": "Account Approvals",
+                    "icon": "fas fa-user-clock",
+                    "endpoint": "admin_account_approvals",
+                    "active_paths": ["/admin/account-approvals"],
+                },
+                {
+                    "label": "Surveys",
+                    "icon": "fas fa-poll",
+                    "endpoint": "admin_surveys",
+                    "active_paths": ["/admin/surveys"],
+                },
+                {
+                    "label": "Data Exports",
+                    "icon": "fas fa-file-export",
+                    "endpoint": "admin_exports",
+                    "active_paths": ["/admin/exports"],
+                    "active_prefixes": ["/exports/"],
+                },
+                {
+                    "label": "Password Management",
+                    "icon": "fas fa-user-lock",
+                    "endpoint": "admin_password_management",
+                    "active_paths": ["/admin/password-management"],
+                    "active_prefixes": ["/admin/users/"],
+                },
+                {
+                    "label": "System Reset",
+                    "icon": "fas fa-database",
+                    "endpoint": "admin_system_reset",
+                    "active_paths": ["/admin/system-reset"],
+                },
+            ],
+        },
+        {
+            "title": "Account",
+            "items": [
+                {
+                    "label": "Change Password",
+                    "icon": "fas fa-key",
+                    "endpoint": "reset_password_dashboard",
+                    "active_paths": ["/reset-password"],
+                },
+                {
+                    "label": "Logout",
+                    "icon": "fas fa-sign-out-alt",
+                    "endpoint": "logout",
+                },
+            ],
+        },
+    ],
+    "director": [
+        {
+            "title": "Insights",
+            "items": [
+                {
+                    "label": "Dashboard",
+                    "icon": "fas fa-home",
+                    "endpoint": "role_dashboard",
+                    "endpoint_kwargs": {"role": "director"},
+                    "active_paths": ["/portal/director/dashboard"],
+                },
+                {
+                    "label": "Notifications",
+                    "icon": "fas fa-bell",
+                    "endpoint": "notifications",
+                    "active_paths": ["/notifications"],
+                    "active_prefixes": ["/notifications/"],
+                },
+                {
+                    "label": "Analytics",
+                    "icon": "fas fa-chart-line",
+                    "endpoint": "analytics",
+                    "active_paths": ["/analytics"],
+                },
+                {
+                    "label": "Survey Insights",
+                    "icon": "fas fa-poll",
+                    "endpoint": "admin_surveys",
+                    "active_paths": ["/admin/surveys"],
+                },
+                {
+                    "label": "Change Password",
+                    "icon": "fas fa-key",
+                    "endpoint": "reset_password_dashboard",
+                    "active_paths": ["/reset-password"],
+                },
+                {
+                    "label": "Logout",
+                    "icon": "fas fa-sign-out-alt",
+                    "endpoint": "logout",
+                },
+            ],
+        },
+    ],
+    "registrar": [
+        {
+            "title": "Records",
+            "items": [
+                {
+                    "label": "Dashboard",
+                    "icon": "fas fa-home",
+                    "endpoint": "role_dashboard",
+                    "endpoint_kwargs": {"role": "registrar"},
+                    "active_paths": ["/portal/registrar/dashboard"],
+                },
+                {
+                    "label": "Notifications",
+                    "icon": "fas fa-bell",
+                    "endpoint": "notifications",
+                    "active_paths": ["/notifications"],
+                    "active_prefixes": ["/notifications/"],
+                },
+                {
+                    "label": "Alumni Records",
+                    "icon": "fas fa-id-card",
+                    "endpoint": "admin_alumni",
+                    "active_paths": ["/admin/alumni"],
+                    "active_prefixes": ["/admin/alumni/edit"],
+                },
+                {
+                    "label": "Change Password",
+                    "icon": "fas fa-key",
+                    "endpoint": "reset_password_dashboard",
+                    "active_paths": ["/reset-password"],
+                },
+                {
+                    "label": "Logout",
+                    "icon": "fas fa-sign-out-alt",
+                    "endpoint": "logout",
+                },
+            ],
+        },
+    ],
+    "osa": [
+        {
+            "title": "Engagement",
+            "items": [
+                {
+                    "label": "Dashboard",
+                    "icon": "fas fa-home",
+                    "endpoint": "role_dashboard",
+                    "endpoint_kwargs": {"role": "osa"},
+                    "active_paths": ["/portal/osa/dashboard"],
+                },
+                {
+                    "label": "Notifications",
+                    "icon": "fas fa-bell",
+                    "endpoint": "notifications",
+                    "active_paths": ["/notifications"],
+                    "active_prefixes": ["/notifications/"],
+                },
+                {
+                    "label": "Events",
+                    "icon": "fas fa-calendar-check",
+                    "endpoint": "admin_events",
+                    "active_paths": ["/admin/events"],
+                    "active_prefixes": ["/admin/events/add", "/admin/events/edit"],
+                },
+                {
+                    "label": "RSVP Analytics",
+                    "icon": "fas fa-user-check",
+                    "endpoint": "admin_event_rsvp_analytics",
+                    "active_paths": ["/admin/events/rsvp-analytics"],
+                },
+                {
+                    "label": "Data Exports",
+                    "icon": "fas fa-file-export",
+                    "endpoint": "admin_exports",
+                    "active_paths": ["/admin/exports"],
+                    "active_prefixes": ["/exports/"],
+                },
+                {
+                    "label": "Change Password",
+                    "icon": "fas fa-key",
+                    "endpoint": "reset_password_dashboard",
+                    "active_paths": ["/reset-password"],
+                },
+                {
+                    "label": "Logout",
+                    "icon": "fas fa-sign-out-alt",
+                    "endpoint": "logout",
+                },
+            ],
+        },
+    ],
+}
 
 OTP_REQUEST_RATE_BUCKETS = defaultdict(deque)
 OTP_VERIFY_RATE_BUCKETS = defaultdict(deque)
@@ -732,6 +1078,24 @@ def role_register_url(role_slug):
     return url_for("role_register", role=role_slug)
 
 
+def get_portal_navigation(role_slug):
+    return PORTAL_NAVIGATION.get(role_slug, [])
+
+
+def nav_item_url(item):
+    endpoint_kwargs = item.get("endpoint_kwargs") or {}
+    return url_for(item["endpoint"], **endpoint_kwargs)
+
+
+def nav_item_active(item):
+    path = request.path or ""
+    active_paths = item.get("active_paths") or []
+    if path in active_paths:
+        return True
+    active_prefixes = item.get("active_prefixes") or []
+    return any(path.startswith(prefix) for prefix in active_prefixes)
+
+
 def set_active_session(user):
     resolved_role = to_role_slug(user.role, default="alumni")
     session[ACTIVE_USER_ID_KEY] = user.id
@@ -1043,6 +1407,18 @@ def role_label(role_slug):
     return ROLE_PORTALS[role_slug]["label"]
 
 
+def notification_source_role(value):
+    role_slug = to_role_slug(value)
+    return role_slug or NOTIF_SOURCE_SYSTEM
+
+
+def notification_source_label(value):
+    source_role = notification_source_role(value)
+    if source_role == NOTIF_SOURCE_SYSTEM:
+        return "System"
+    return role_label(source_role)
+
+
 def resolve_requested_role(default=None):
     role_input = request.form.get("role") if request.method == "POST" else None
     if not role_input:
@@ -1055,9 +1431,11 @@ def inject_role():
     role_value = None
     current_dashboard_url = None
     unread_notifications_count = 0
+    current_portal_navigation = []
     if current_user.is_authenticated:
         role_value = to_role_slug(current_user.role, default="alumni")
         current_dashboard_url = role_dashboard_url(role_value)
+        current_portal_navigation = get_portal_navigation(role_value)
         unread_notifications_count = Notification.query.filter_by(
             user_id=current_user.id,
             is_read=False,
@@ -1065,6 +1443,7 @@ def inject_role():
     return {
         "current_role": role_value,
         "current_dashboard_url": current_dashboard_url,
+        "current_portal_navigation": current_portal_navigation,
         "role_portals": ROLE_PORTALS,
         "rsvp_allowed_roles": sorted(get_rsvp_allowed_roles()),
         "campus_logo_static_path": url_for("static", filename=CAMPUS_LOGO_FILE),
@@ -1086,6 +1465,21 @@ def profile_initials(profile):
 def role_display_name(role_value):
     role_slug = to_role_slug(role_value, default="alumni")
     return role_label(role_slug)
+
+
+@app.template_global()
+def nav_url(item):
+    return nav_item_url(item)
+
+
+@app.template_global()
+def nav_is_active(item):
+    return nav_item_active(item)
+
+
+@app.template_global()
+def notification_source_name(source_role):
+    return notification_source_label(source_role)
 
 
 @app.template_filter("rsvp_label")
@@ -1619,21 +2013,40 @@ def send_email_verification_link(user, token_record, role_slug="alumni"):
 
 def get_notification_recipients():
     """
-    Target active, verified alumni accounts for platform notifications.
+    Target active, verified, approved accounts across every portal role.
     """
     query = User.query.filter(
-        User.role == UserRole.ALUMNI,
         User.is_active.is_(True),
         User.otp_verified.is_(True),
+        User.approval_status == APPROVAL_APPROVED,
     )
     if app.config.get("EMAIL_VERIFICATION_REQUIRED", True):
         query = query.filter(User.email_verified.is_(True))
-    return query.all()
+    return query.order_by(User.id.asc()).all()
 
 
-def create_bulk_notifications(users, title, message, notification_type=NOTIF_TYPE_SYSTEM):
+def recent_notifications_for_user(user_id, limit=4):
+    if not user_id:
+        return []
+    return (
+        Notification.query.filter_by(user_id=user_id)
+        .order_by(Notification.created_at.desc())
+        .limit(max(1, int(limit)))
+        .all()
+    )
+
+
+def create_bulk_notifications(
+    users,
+    title,
+    message,
+    notification_type=NOTIF_TYPE_SYSTEM,
+    source_role=NOTIF_SOURCE_SYSTEM,
+):
     if not users:
         return 0
+    normalized_source_role = notification_source_role(source_role)
+    unique_users = {user.id: user for user in users if getattr(user, "id", None)}
     db.session.bulk_save_objects(
         [
             Notification(
@@ -1641,12 +2054,48 @@ def create_bulk_notifications(users, title, message, notification_type=NOTIF_TYP
                 title=title,
                 message=message,
                 notification_type=notification_type,
+                source_role=normalized_source_role,
                 is_read=False,
+                created_at=datetime.utcnow(),
             )
-            for user in users
+            for user in unique_users.values()
         ]
     )
-    return len(users)
+    return len(unique_users)
+
+
+def build_job_notification_content(job, action):
+    if action == "updated":
+        return (
+            "Job posting updated",
+            f"{job.title} at {job.company} was updated. Review the latest details in the job board.",
+        )
+    if action == "deleted":
+        return (
+            "Job posting removed",
+            f"{job.title} at {job.company} is no longer available in the portal.",
+        )
+    return (
+        "New job opportunity posted",
+        f"{job.title} at {job.company} is now available.",
+    )
+
+
+def build_event_notification_content(event_obj, action):
+    if action == "updated":
+        return (
+            "Event updated",
+            f"{event_obj.title} was updated. Check the latest schedule and event details.",
+        )
+    if action == "deleted":
+        return (
+            "Event removed",
+            f"{event_obj.title} was removed from the events calendar.",
+        )
+    return (
+        "New event announced",
+        f"{event_obj.title} has been posted. RSVP is now open.",
+    )
 
 
 def email_subject_for_job(job):
@@ -1715,30 +2164,42 @@ def send_event_notification_emails(users, event_obj):
     return sent, failed
 
 
-def dispatch_job_notifications(job):
+def dispatch_job_notifications(job, action="created", source_role=None, send_email=None):
     users = get_notification_recipients()
-    title = "New job opportunity posted"
-    message = f"{job.title} at {job.company} is now available."
-    created_count = create_bulk_notifications(users, title, message, notification_type=NOTIF_TYPE_JOB)
+    title, message = build_job_notification_content(job, action)
+    created_count = create_bulk_notifications(
+        users,
+        title,
+        message,
+        notification_type=NOTIF_TYPE_JOB,
+        source_role=source_role,
+    )
     if not safe_commit("Job was created but notifications could not be saved."):
         return {"created": 0, "email_sent": 0, "email_failed": len(users)}
 
-    if not app.config.get("EMAIL_NOTIFICATION_ENABLED", True):
+    should_send_email = action == "created" if send_email is None else bool(send_email)
+    if not should_send_email or not app.config.get("EMAIL_NOTIFICATION_ENABLED", True):
         return {"created": created_count, "email_sent": 0, "email_failed": 0}
 
     sent, failed = send_job_notification_emails(users, job)
     return {"created": created_count, "email_sent": sent, "email_failed": failed}
 
 
-def dispatch_event_notifications(event_obj):
+def dispatch_event_notifications(event_obj, action="created", source_role=None, send_email=None):
     users = get_notification_recipients()
-    title = "New event announced"
-    message = f"{event_obj.title} has been posted. RSVP is now open."
-    created_count = create_bulk_notifications(users, title, message, notification_type=NOTIF_TYPE_EVENT)
+    title, message = build_event_notification_content(event_obj, action)
+    created_count = create_bulk_notifications(
+        users,
+        title,
+        message,
+        notification_type=NOTIF_TYPE_EVENT,
+        source_role=source_role,
+    )
     if not safe_commit("Event was created but notifications could not be saved."):
         return {"created": 0, "email_sent": 0, "email_failed": len(users)}
 
-    if not app.config.get("EMAIL_NOTIFICATION_ENABLED", True):
+    should_send_email = action == "created" if send_email is None else bool(send_email)
+    if not should_send_email or not app.config.get("EMAIL_NOTIFICATION_ENABLED", True):
         return {"created": created_count, "email_sent": 0, "email_failed": 0}
 
     sent, failed = send_event_notification_emails(users, event_obj)
@@ -1772,6 +2233,7 @@ def degree_options_for(selected=None):
 
 def render_dashboard_for_role(role_slug):
     stats = get_basic_stats()
+    recent_notifications = recent_notifications_for_user(current_user.id)
     employment_rate = calculate_employment_rate(
         stats["total_alumni"], stats["employed_count"]
     )
@@ -1787,6 +2249,13 @@ def render_dashboard_for_role(role_slug):
             ),
         ).count()
         total_rsvps = EventRSVP.query.filter(EventRSVP.status == RSVP_ATTEND).count()
+        recent_activity = (
+            db.session.query(SystemLog)
+            .outerjoin(User)
+            .order_by(SystemLog.timestamp.desc())
+            .limit(5)
+            .all()
+        )
         return render_template(
             "admin_dashboard.html",
             total_alumni=stats["total_alumni"],
@@ -1796,6 +2265,8 @@ def render_dashboard_for_role(role_slug):
             employment_rate=employment_rate,
             pending_accounts=pending_accounts,
             total_rsvps=total_rsvps,
+            recent_activity=recent_activity,
+            recent_notifications=recent_notifications,
         )
 
     if role_slug == "director":
@@ -1803,6 +2274,7 @@ def render_dashboard_for_role(role_slug):
             "director_dashboard.html",
             employment_rate=employment_rate,
             survey_rate=survey_rate,
+            recent_notifications=recent_notifications,
         )
 
     if role_slug == "registrar":
@@ -1816,6 +2288,7 @@ def render_dashboard_for_role(role_slug):
             "registrar_dashboard.html",
             pending_verifications=pending_verifications,
             verified_alumni=verified_alumni,
+            recent_notifications=recent_notifications,
         )
 
     if role_slug == "osa":
@@ -1836,12 +2309,14 @@ def render_dashboard_for_role(role_slug):
             "osa_dashboard.html",
             upcoming_events=upcoming_events,
             rsvp_count=rsvp_count,
+            recent_notifications=recent_notifications,
         )
 
     return render_template(
         "alumni_dashboard.html",
         total_alumni=stats["total_alumni"],
         active_jobs=Job.query.filter(Job.is_active.is_(True)).count(),
+        recent_notifications=recent_notifications,
     )
 
 
@@ -2340,6 +2815,7 @@ def ensure_sqlite_schema():
                         "title": "TEXT",
                         "message": "TEXT",
                         "notification_type": "TEXT",
+                        "source_role": "TEXT DEFAULT 'system'",
                         "is_read": "INTEGER DEFAULT 0",
                         "created_at": "DATETIME",
                     },
@@ -2398,6 +2874,9 @@ def ensure_sqlite_schema():
                 )
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS ix_notification_is_read ON notification(is_read)"
+                )
+                cursor.execute(
+                    "UPDATE notification SET source_role = COALESCE(source_role, 'system')"
                 )
                 cursor.execute(
                     "UPDATE user SET email_verified = COALESCE(email_verified, 1)"
@@ -3245,6 +3724,7 @@ def dashboard_overview():
         completion_percentage=completion_percentage,
         upcoming_events=upcoming_events,
         recent_jobs=recent_jobs,
+        recent_notifications=recent_notifications_for_user(current_user.id),
     )
 
 
@@ -3940,6 +4420,7 @@ def alumni_module_dashboard():
         education_completion=education_completion,
         family_completion=family_completion,
         enrollment_completion=enrollment_completion,
+        recent_notifications=recent_notifications_for_user(current_user.id),
     )
 
 
@@ -4270,7 +4751,11 @@ def my_profile():
     if not profile:
         flash("Please complete your profile first.", "warning")
         return redirect(url_for("profile"))
-    return render_template("my_profile.html", profile=profile)
+    return render_template(
+        "my_profile.html",
+        profile=profile,
+        recent_notifications=recent_notifications_for_user(current_user.id),
+    )
 
 
 @app.route("/my-survey")
@@ -4285,7 +4770,11 @@ def my_survey():
         .order_by(TracerSurvey.created_at.desc())
         .first()
     )
-    return render_template("my_survey.html", survey=survey)
+    return render_template(
+        "my_survey.html",
+        survey=survey,
+        recent_notifications=recent_notifications_for_user(current_user.id),
+    )
 
 
 @app.route("/survey", methods=["GET", "POST"])
@@ -4380,6 +4869,7 @@ def admin_alumni():
                 AlumniProfile.first_name.ilike(like),
                 AlumniProfile.last_name.ilike(like),
                 AlumniProfile.degree.ilike(like),
+                AlumniProfile.student_id.ilike(like),
                 User.email.ilike(like),
             )
         )
@@ -4605,7 +5095,12 @@ def admin_add_job():
         if not safe_commit("Unable to create job right now."):
             return render_template("admin_edit_job.html", job=None)
 
-        dispatch_result = dispatch_job_notifications(job)
+        dispatch_result = dispatch_job_notifications(
+            job,
+            action="created",
+            source_role=to_role_slug(current_user.role, default="admin"),
+            send_email=True,
+        )
         flash(
             f"Job created. {dispatch_result['created']} in-app notification(s) queued.",
             "success",
@@ -4638,7 +5133,18 @@ def admin_edit_job(job_id):
         job.salary_min = parse_int(request.form.get("salary_min"))
         job.salary_max = parse_int(request.form.get("salary_max"))
         db.session.commit()
+        dispatch_result = dispatch_job_notifications(
+            job,
+            action="updated",
+            source_role=to_role_slug(current_user.role, default="admin"),
+            send_email=False,
+        )
         flash("Job updated.", "success")
+        if dispatch_result["created"]:
+            flash(
+                f"Update broadcast to {dispatch_result['created']} notification inbox(es).",
+                "info",
+            )
         return redirect(url_for("admin_jobs"))
     return render_template("admin_edit_job.html", job=job)
 
@@ -4647,9 +5153,21 @@ def admin_edit_job(job_id):
 @role_required("admin")
 def admin_delete_job(job_id):
     job = Job.query.get_or_404(job_id)
+    job_snapshot = SimpleNamespace(title=job.title, company=job.company)
     db.session.delete(job)
     db.session.commit()
+    dispatch_result = dispatch_job_notifications(
+        job_snapshot,
+        action="deleted",
+        source_role=to_role_slug(current_user.role, default="admin"),
+        send_email=False,
+    )
     flash("Job deleted.", "success")
+    if dispatch_result["created"]:
+        flash(
+            f"Removal broadcast to {dispatch_result['created']} notification inbox(es).",
+            "info",
+        )
     return redirect(url_for("admin_jobs"))
 
 
@@ -4708,7 +5226,12 @@ def admin_add_event():
         if not safe_commit("Unable to create event right now."):
             return render_template("admin_edit_event.html", event=None)
 
-        dispatch_result = dispatch_event_notifications(event)
+        dispatch_result = dispatch_event_notifications(
+            event,
+            action="created",
+            source_role=to_role_slug(current_user.role, default="admin"),
+            send_email=True,
+        )
         flash(
             f"Event created. {dispatch_result['created']} in-app notification(s) queued.",
             "success",
@@ -4747,7 +5270,18 @@ def admin_edit_event(event_id):
         event.contact_email = contact_email
         event.is_published = True
         db.session.commit()
+        dispatch_result = dispatch_event_notifications(
+            event,
+            action="updated",
+            source_role=to_role_slug(current_user.role, default="admin"),
+            send_email=False,
+        )
         flash("Event updated.", "success")
+        if dispatch_result["created"]:
+            flash(
+                f"Update broadcast to {dispatch_result['created']} notification inbox(es).",
+                "info",
+            )
         return redirect(url_for("admin_events"))
     return render_template("admin_edit_event.html", event=event)
 
@@ -4756,9 +5290,21 @@ def admin_edit_event(event_id):
 @role_required("admin", "osa")
 def admin_delete_event(event_id):
     event = Event.query.get_or_404(event_id)
+    event_snapshot = SimpleNamespace(title=event.title)
     db.session.delete(event)
     db.session.commit()
+    dispatch_result = dispatch_event_notifications(
+        event_snapshot,
+        action="deleted",
+        source_role=to_role_slug(current_user.role, default="admin"),
+        send_email=False,
+    )
     flash("Event deleted.", "success")
+    if dispatch_result["created"]:
+        flash(
+            f"Removal broadcast to {dispatch_result['created']} notification inbox(es).",
+            "info",
+        )
     return redirect(url_for("admin_events"))
 
 

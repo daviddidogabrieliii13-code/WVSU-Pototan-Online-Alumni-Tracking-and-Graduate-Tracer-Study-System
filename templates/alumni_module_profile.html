@@ -14,18 +14,7 @@
 
 <div class="dashboard-layout">
     <aside class="sidebar">
-        <div class="sidebar-menu">
-            <h4>Alumni Module</h4>
-            <a href="{{ url_for('alumni_module_dashboard') }}" class="sidebar-link">
-                <i class="fas fa-chart-pie"></i> Module Dashboard
-            </a>
-            <a href="{{ url_for('alumni_module_form') }}" class="sidebar-link">
-                <i class="fas fa-id-card"></i> 4-Part Form
-            </a>
-            <a href="{{ url_for('alumni_module_profile') }}" class="sidebar-link active">
-                <i class="fas fa-address-card"></i> Profile View
-            </a>
-        </div>
+        {% include '_sidebar_nav_sections.html' %}
         <div class="sidebar-profile">
             <div class="sidebar-avatar">
                 <img src="{{ profile_photo_url(profile) }}" alt="Profile photo">

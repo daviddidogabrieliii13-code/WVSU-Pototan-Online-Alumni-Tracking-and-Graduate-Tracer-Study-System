@@ -3,8 +3,12 @@
 {% block title %}Registrar Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard">
-    <div class="container">
+<div class="dashboard-layout">
+    <aside class="sidebar">
+        {% include '_sidebar_nav_sections.html' %}
+    </aside>
+
+    <main class="main-content">
         <section class="portal-hero" data-portal="registrar">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
@@ -21,7 +25,7 @@
                     </div>
                 </div>
                 <div class="portal-hero-actions">
-                    <a href="#" class="btn btn-primary btn-sm">Review Pending</a>
+                    <a href="{{ url_for('admin_alumni') }}" class="btn btn-primary btn-sm">Review Records</a>
                     <a href="{{ url_for('admin_alumni') }}" class="btn btn-outline btn-sm">View Records</a>
                 </div>
             </div>
@@ -40,7 +44,7 @@
                 </div>
                 <div class="stat-value">{{ pending_verifications | default(0) }}</div>
                 <div class="portal-card-actions">
-                    <a href="#" class="btn btn-primary btn-sm">Review Pending</a>
+                    <a href="{{ url_for('admin_alumni') }}" class="btn btn-primary btn-sm">Review Records</a>
                 </div>
             </article>
             
@@ -70,10 +74,10 @@
                         <p class="portal-card-subtitle">Quick verification</p>
                     </div>
                 </div>
-                <div class="search-box">
-                    <input type="text" placeholder="Enter Student ID">
-                    <button class="btn btn-primary btn-sm">Search</button>
-                </div>
+                <form method="GET" action="{{ url_for('admin_alumni') }}" class="search-box">
+                    <input type="text" name="search" placeholder="Enter Student ID" aria-label="Search student ID">
+                    <button type="submit" class="btn btn-primary btn-sm">Search</button>
+                </form>
             </article>
             
             <article class="portal-card" data-accent="registrar">
@@ -86,12 +90,14 @@
                         <p class="portal-card-subtitle">Graduates by cohort</p>
                     </div>
                 </div>
-                <p class="portal-card-desc">Review yearly graduation totals by program.</p>
+                <p class="portal-card-desc">Review alumni records by cohort, degree, and student identifier.</p>
                 <div class="portal-card-actions">
-                    <a href="#" class="btn btn-primary btn-sm">View Reports</a>
+                    <a href="{{ url_for('admin_alumni') }}" class="btn btn-primary btn-sm">Open Records</a>
                 </div>
             </article>
         </div>
-    </div>
+
+        {% include '_dashboard_notifications.html' %}
+    </main>
 </div>
 {% endblock %}
