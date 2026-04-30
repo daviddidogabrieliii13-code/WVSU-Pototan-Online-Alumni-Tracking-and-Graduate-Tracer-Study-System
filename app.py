@@ -1188,6 +1188,8 @@ def send_otp(email, otp, role_slug="alumni"):
         "label", "Alumni"
     )
     if not smtp_delivery_available():
+        if app.config.get("SHOW_OTP_IN_UI"):
+            return "ui"
         raise RuntimeError(
             "OTP email is not configured. Set MAIL_USERNAME and GMAIL_APP_PASSWORD for your Gmail sender."
         )
@@ -1492,6 +1494,20 @@ def enforce_session_validation():
     if request.endpoint == "static":
         return None
     return validate_active_session()
+
+
+@app.after_request
+def apply_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.is_secure or app.config.get("SESSION_COOKIE_SECURE"):
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+    return response
 
 
 def role_required(*roles):

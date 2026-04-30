@@ -25,7 +25,8 @@
 
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+{% set shell_role = current_role if current_user.is_authenticated and current_role else 'public' %}
+<body class="portal-shell portal-shell-{{ shell_role }}" data-auth-state="{{ 'signed-in' if current_user.is_authenticated else 'guest' }}" data-portal-role="{{ shell_role }}">
     <nav class="navbar" id="navbar">
         <div class="nav-container">
             <a href="{{ url_for('index') }}" class="nav-logo">

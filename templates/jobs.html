@@ -47,7 +47,7 @@
             <div class="job-meta">
                 <div class="job-meta-item">
                     <i class="fas fa-map-marker-alt"></i>
-                    <span>{{ job.location }}</span>
+                    <span>{{ job.location or 'Location TBA' }}</span>
                 </div>
                 {% if job.salary_display %}
                 <div class="job-meta-item">
@@ -61,14 +61,16 @@
                 </div>
             </div>
             
-            <p class="job-card-summary">{{ job.description[:200] }}...</p>
+            <p class="job-card-summary">
+                {{ (job.description[:200] ~ '...') if job.description else 'No description has been provided yet.' }}
+            </p>
             
             <div class="job-card-actions">
                 <a href="{{ url_for('job_detail', job_id=job.id) }}" class="btn btn-outline btn-sm">
                     <i class="fas fa-eye"></i> View Details
                 </a>
                 {% if job.apply_link %}
-                <a href="{{ job.apply_link }}" target="_blank" class="btn btn-primary btn-sm">
+                <a href="{{ job.apply_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
                     <i class="fas fa-paper-plane"></i> Apply Now
                 </a>
                 {% endif %}

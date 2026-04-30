@@ -154,11 +154,23 @@ class SystemImprovementsTestCase(unittest.TestCase):
 
         self.admin_id = admin.id
         self.alumni_id = alumni.id
+        self.director_id = director.id
+        self.registrar_id = registrar.id
+        self.osa_id = osa.id
 
     def _login_as(self, user_id):
+        with self.app.app_context():
+            user = app_module.db.session.get(User, user_id)
+            role_slug = app_module.to_role_slug(user.role, default="alumni")
+
         with self.client.session_transaction() as session:
             session["_user_id"] = str(user_id)
             session["_fresh"] = True
+            session[app_module.ACTIVE_USER_ID_KEY] = user_id
+            session[app_module.ACTIVE_ROLE_KEY] = role_slug
+            session.pop(app_module.AUTH_TOKEN_SESSION_KEY, None)
+            session.pop(app_module.AUTH_TOKEN_EXPIRY_SESSION_KEY, None)
+            session.pop(app_module.OTP_SESSION_KEY, None)
 
     def test_bulk_delete_removes_user_dependencies_and_profile_photo(self):
         self._login_as(self.admin_id)
@@ -208,6 +220,30 @@ class SystemImprovementsTestCase(unittest.TestCase):
 
     def test_missing_smtp_credentials_use_mock_delivery(self):
         self.assertTrue(app_module.should_mock_email_delivery())
+
+    def test_missing_smtp_credentials_keep_otp_ui_fallback(self):
+        original_show_otp = self.app.config.get("SHOW_OTP_IN_UI")
+        self.app.config["SHOW_OTP_IN_UI"] = True
+        try:
+            delivery_mode = app_module.send_otp(
+                "external.user@example.com",
+                "123456",
+                role_slug="alumni",
+            )
+        finally:
+            self.app.config["SHOW_OTP_IN_UI"] = original_show_otp
+
+        self.assertEqual(delivery_mode, "ui")
+
+    def test_security_headers_are_applied(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(response.headers.get("X-Frame-Options"), "SAMEORIGIN")
+        self.assertEqual(
+            response.headers.get("Referrer-Policy"),
+            "strict-origin-when-cross-origin",
+        )
 
     def test_job_creation_dispatches_notifications_to_all_roles(self):
         self._login_as(self.admin_id)
@@ -279,6 +315,21 @@ class SystemImprovementsTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Notifications", response.data)
         self.assertIn(b"Data Exports", response.data)
+        self.assertIn(b'data-portal-role="admin"', response.data)
+
+    def test_privileged_pages_render_matching_portal_shells(self):
+        pages = [
+            (self.admin_id, "/admin/password-management", b'data-portal-role="admin"'),
+            (self.registrar_id, "/admin/alumni", b'data-portal-role="registrar"'),
+            (self.director_id, "/analytics", b'data-portal-role="director"'),
+            (self.osa_id, "/admin/events", b'data-portal-role="osa"'),
+        ]
+
+        for user_id, path, expected_shell in pages:
+            self._login_as(user_id)
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(expected_shell, response.data)
 
     def test_admin_dashboard_password_card_uses_real_reset_route(self):
         self._login_as(self.admin_id)
