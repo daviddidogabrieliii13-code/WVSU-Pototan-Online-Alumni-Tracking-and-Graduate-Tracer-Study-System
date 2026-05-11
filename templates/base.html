@@ -25,7 +25,17 @@
 
     {% block extra_css %}{% endblock %}
 </head>
-{% set shell_role = current_role if current_user.is_authenticated and current_role else 'public' %}
+{% set requested_shell_role = 'public' %}
+{% if not current_user.is_authenticated %}
+    {% if role_slug is defined and role_slug in role_portals %}
+        {% set requested_shell_role = role_slug %}
+    {% elif request.view_args and request.view_args.get('role') in role_portals %}
+        {% set requested_shell_role = request.view_args.get('role') %}
+    {% elif request.args.get('role') in role_portals %}
+        {% set requested_shell_role = request.args.get('role') %}
+    {% endif %}
+{% endif %}
+{% set shell_role = current_role if current_user.is_authenticated and current_role else requested_shell_role %}
 <body class="portal-shell portal-shell-{{ shell_role }}" data-auth-state="{{ 'signed-in' if current_user.is_authenticated else 'guest' }}" data-portal-role="{{ shell_role }}">
     <nav class="navbar" id="navbar">
         <div class="nav-container">

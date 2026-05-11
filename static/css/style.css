@@ -6214,3 +6214,271 @@ button:disabled {
 :root[data-theme="dark"] .auth-page-otp .auth-header h1 {
     color: var(--visible-text) !important;
 }
+
+/* --------------------------------------------------------------------------
+   Centralized Role Theme Consistency Layer
+   Additive only: preserves layout and reuses each portal's existing colors.
+-------------------------------------------------------------------------- */
+
+.auth-page[data-portal] {
+    --portal-theme-accent: var(--role-accent);
+    --portal-theme-accent-strong: var(--role-accent-strong);
+    --portal-theme-accent-soft: var(--role-accent-soft);
+    --portal-theme-accent-border: var(--role-accent-border);
+    --portal-theme-readable: var(--portal-theme-accent-strong);
+    --portal-theme-action: var(--portal-theme-accent-strong);
+    --portal-theme-action-hover: var(--portal-theme-accent-strong);
+    --primary: var(--portal-theme-readable);
+    --primary-dark: var(--portal-theme-action-hover);
+    --primary-light: var(--portal-theme-accent-soft);
+}
+
+body[data-auth-state="signed-in"],
+body[data-auth-state="guest"]:not([data-portal-role="public"]) {
+    --portal-theme-accent: var(--portal-shell-accent);
+    --portal-theme-accent-strong: var(--portal-shell-accent-strong);
+    --portal-theme-accent-soft: var(--portal-shell-accent-soft);
+    --portal-theme-accent-border: var(--portal-shell-accent-border);
+    --portal-theme-readable: var(--portal-theme-accent-strong);
+    --portal-theme-action: var(--portal-theme-accent-strong);
+    --portal-theme-action-hover: var(--portal-theme-accent-strong);
+    --primary: var(--portal-theme-readable);
+    --primary-dark: var(--portal-theme-action-hover);
+    --primary-light: var(--portal-theme-accent-soft);
+}
+
+:root[data-theme="dark"] .auth-page[data-portal],
+:root[data-theme="dark"] body[data-auth-state="signed-in"],
+:root[data-theme="dark"] body[data-auth-state="guest"]:not([data-portal-role="public"]) {
+    --portal-theme-readable: color-mix(in srgb, var(--portal-theme-accent) 58%, var(--visible-on-accent));
+    --primary: var(--portal-theme-readable);
+    --primary-dark: var(--portal-theme-readable);
+}
+
+.auth-page[data-portal] .auth-card,
+body[data-auth-state="signed-in"] .auth-card,
+body[data-auth-state="signed-in"] .auth-card-wide,
+body[data-auth-state="signed-in"] .section-card,
+body[data-auth-state="signed-in"] .page-header-content,
+body[data-auth-state="signed-in"] .card,
+body[data-auth-state="signed-in"] .table-container,
+body[data-auth-state="signed-in"] .form-section,
+body[data-auth-state="signed-in"] .dashboard-card,
+body[data-auth-state="signed-in"] .stat-card,
+body[data-auth-state="signed-in"] .chart-card,
+body[data-auth-state="signed-in"] .profile-card,
+body[data-auth-state="signed-in"] .profile-progress,
+body[data-auth-state="signed-in"] .job-card,
+body[data-auth-state="signed-in"] .event-card,
+body[data-auth-state="signed-in"] .alumni-card,
+body[data-auth-state="signed-in"] .modal,
+body[data-auth-state="signed-in"] .modal-content,
+body[data-auth-state="signed-in"] .quick-actions,
+body[data-auth-state="signed-in"] .activity-list,
+body[data-auth-state="signed-in"] .recent-activity,
+body[data-auth-state="signed-in"] .search-filters,
+body[data-auth-state="signed-in"] .filter-form,
+body[data-auth-state="signed-in"] .survey-container,
+body[data-auth-state="signed-in"] .empty-state {
+    border-color: var(--portal-theme-accent-border);
+}
+
+.auth-page[data-portal] .auth-card {
+    border-top-color: var(--portal-theme-accent);
+}
+
+.auth-page[data-portal] .auth-card::before {
+    background: linear-gradient(140deg, var(--portal-theme-accent-soft), transparent 44%);
+}
+
+.auth-page[data-portal] .auth-icon,
+body[data-auth-state="signed-in"] .sidebar-avatar {
+    background: var(--portal-theme-action);
+    border-color: var(--portal-theme-accent-border);
+    color: var(--visible-on-accent);
+}
+
+.auth-page[data-portal] .auth-footer a,
+.auth-page[data-portal] .forgot-link,
+.auth-page[data-portal] .otp-demo-value,
+.auth-page[data-portal] .copy-target::after,
+body[data-auth-state="signed-in"] .summary-value,
+body[data-auth-state="signed-in"] .stat-value,
+body[data-auth-state="signed-in"] .table-primary-text,
+body[data-auth-state="signed-in"] .forgot-link,
+body[data-auth-state="signed-in"] .copy-target::after {
+    color: var(--portal-theme-readable);
+}
+
+.auth-page[data-portal] .auth-footer a:hover,
+.auth-page[data-portal] .auth-footer a:focus-visible,
+.auth-page[data-portal] .forgot-link:hover,
+.auth-page[data-portal] .forgot-link:focus-visible {
+    color: var(--portal-theme-readable);
+    text-decoration-thickness: 2px;
+}
+
+.auth-page[data-portal] .btn-primary,
+.auth-page[data-portal] .btn-login,
+body[data-auth-state="signed-in"] .btn-primary,
+body[data-auth-state="signed-in"] .btn-login,
+body[data-auth-state="signed-in"] .nav-btn.btn-primary {
+    background: var(--portal-theme-action);
+    border-color: var(--portal-theme-action);
+    color: var(--visible-on-accent);
+}
+
+.auth-page[data-portal] .btn-primary:hover,
+.auth-page[data-portal] .btn-primary:focus-visible,
+.auth-page[data-portal] .btn-login:hover,
+.auth-page[data-portal] .btn-login:focus-visible,
+body[data-auth-state="signed-in"] .btn-primary:hover,
+body[data-auth-state="signed-in"] .btn-primary:focus-visible,
+body[data-auth-state="signed-in"] .btn-login:hover,
+body[data-auth-state="signed-in"] .btn-login:focus-visible,
+body[data-auth-state="signed-in"] .nav-btn.btn-primary:hover,
+body[data-auth-state="signed-in"] .nav-btn.btn-primary:focus-visible {
+    background: var(--portal-theme-action-hover);
+    border-color: var(--portal-theme-readable);
+    color: var(--visible-on-accent);
+}
+
+.auth-page[data-portal] .btn-outline,
+body[data-auth-state="signed-in"] .btn-outline,
+body[data-auth-state="signed-in"] .nav-btn.btn-outline {
+    border-color: var(--portal-theme-accent-border);
+    color: var(--portal-theme-readable);
+}
+
+.auth-page[data-portal] .btn-outline:hover,
+.auth-page[data-portal] .btn-outline:focus-visible,
+body[data-auth-state="signed-in"] .btn-outline:hover,
+body[data-auth-state="signed-in"] .btn-outline:focus-visible,
+body[data-auth-state="signed-in"] .nav-btn.btn-outline:hover,
+body[data-auth-state="signed-in"] .nav-btn.btn-outline:focus-visible {
+    background: var(--portal-theme-action);
+    border-color: var(--portal-theme-action);
+    color: var(--visible-on-accent);
+}
+
+.auth-page[data-portal] .form-control:focus,
+.auth-page[data-portal] input:focus,
+.auth-page[data-portal] select:focus,
+.auth-page[data-portal] textarea:focus,
+body[data-auth-state="signed-in"] .form-control:focus,
+body[data-auth-state="signed-in"] input:focus,
+body[data-auth-state="signed-in"] select:focus,
+body[data-auth-state="signed-in"] textarea:focus {
+    border-color: var(--portal-theme-readable);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--portal-theme-readable) 22%, transparent);
+}
+
+.auth-page[data-portal] .otp-input,
+.auth-page[data-portal] .otp-slot-input {
+    border-color: var(--portal-theme-readable);
+}
+
+.auth-page[data-portal] .otp-input:focus,
+.auth-page[data-portal] .otp-slot-input:focus {
+    border-color: var(--portal-theme-readable);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--portal-theme-readable) 24%, transparent);
+}
+
+.auth-page[data-portal] .otp-demo-card,
+.auth-page[data-portal] .otp-info,
+body[data-auth-state="signed-in"] .otp-info {
+    border-color: var(--portal-theme-accent-border);
+    background: var(--surface-card);
+}
+
+body[data-auth-state="signed-in"] .navbar {
+    border-bottom-color: var(--portal-theme-accent-border);
+}
+
+body[data-auth-state="guest"]:not([data-portal-role="public"]) .navbar {
+    background: linear-gradient(135deg, var(--portal-shell-nav), var(--portal-shell-nav-strong));
+    border-bottom-color: var(--portal-theme-accent-border);
+}
+
+body[data-auth-state="guest"]:not([data-portal-role="public"]) .nav-btn.btn-primary {
+    background: var(--portal-theme-action);
+    border-color: var(--portal-theme-action);
+    color: var(--visible-on-accent);
+}
+
+body[data-auth-state="guest"]:not([data-portal-role="public"]) .nav-btn.btn-primary:hover,
+body[data-auth-state="guest"]:not([data-portal-role="public"]) .nav-btn.btn-primary:focus-visible {
+    background: var(--portal-theme-action-hover);
+    border-color: var(--portal-theme-readable);
+    color: var(--visible-on-accent);
+}
+
+body[data-auth-state="guest"]:not([data-portal-role="public"]) .nav-btn.btn-outline,
+body[data-auth-state="guest"]:not([data-portal-role="public"]) .theme-toggle {
+    border-color: var(--portal-theme-accent-border);
+}
+
+body[data-auth-state="signed-in"] .sidebar {
+    border-color: var(--portal-theme-accent-border);
+}
+
+body[data-auth-state="signed-in"] .sidebar-link i {
+    color: var(--portal-theme-readable);
+}
+
+body[data-auth-state="signed-in"] .sidebar-link:hover,
+body[data-auth-state="signed-in"] .sidebar-link:focus-visible,
+body[data-auth-state="signed-in"] .sidebar-link.active {
+    background: var(--portal-theme-accent-soft);
+    border-color: var(--portal-theme-accent-border);
+    color: var(--portal-theme-readable);
+}
+
+body[data-auth-state="signed-in"] .table th {
+    background: var(--portal-shell-table-head);
+    color: var(--portal-shell-text);
+}
+
+body[data-auth-state="signed-in"] .table tbody tr:hover {
+    background: var(--portal-theme-accent-soft);
+}
+
+body[data-auth-state="signed-in"] .pagination a:hover,
+body[data-auth-state="signed-in"] .directory-pagination a:hover,
+body[data-auth-state="signed-in"] .pagination span,
+body[data-auth-state="signed-in"] .directory-pagination span {
+    border-color: var(--portal-theme-accent-border);
+    color: var(--portal-theme-readable);
+}
+
+.auth-page[data-portal] .alert-info,
+body[data-auth-state="signed-in"] .alert-info,
+body[data-auth-state="signed-in"] .badge-primary,
+body[data-auth-state="signed-in"] .status-info,
+body[data-auth-state="signed-in"] .sidebar-inline-badge {
+    background: var(--portal-theme-accent-soft);
+    border-color: var(--portal-theme-accent-border);
+    color: var(--portal-theme-readable);
+}
+
+:root[data-theme="dark"] .auth-page[data-portal] .auth-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .auth-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .auth-card-wide,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .section-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .page-header-content,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .table-container,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .form-section,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .dashboard-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .stat-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .chart-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .profile-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .profile-progress,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .job-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .event-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .alumni-card,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .modal,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .modal-content,
+:root[data-theme="dark"] body[data-auth-state="signed-in"] .sidebar {
+    border-color: color-mix(in srgb, var(--portal-theme-readable) 34%, var(--visible-border));
+}

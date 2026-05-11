@@ -5326,14 +5326,18 @@ def admin_delete_event(event_id):
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
+    requested_role = to_role_slug(
+        request.form.get("role") or request.args.get("role"),
+        default="alumni",
+    )
     if request.method == "POST":
         email = clean_text(request.form.get("email")).lower()
         if not email:
             flash("Email is required.", "danger")
-            return render_template("forgot_password.html")
+            return render_template("forgot_password.html", role_slug=requested_role)
         if not is_valid_email(email):
             flash("Please provide a valid email address.", "danger")
-            return render_template("forgot_password.html")
+            return render_template("forgot_password.html", role_slug=requested_role)
         user = User.query.filter_by(email=email).first()
         if user:
             token = secrets.token_urlsafe(32)
@@ -5365,19 +5369,24 @@ def forgot_password():
             )
             if delivery_mode == "smtp" and not delivery_error:
                 flash("Password reset link sent to your email.", "success")
-                return render_template("forgot_password.html", success_message="Reset link sent. Please check your email.")
+                return render_template(
+                    "forgot_password.html",
+                    role_slug=requested_role,
+                    success_message="Reset link sent. Please check your email.",
+                )
 
             # Mock/fallback branch keeps recovery functional in non-SMTP environments.
             print(f"[PASSWORD RESET FALLBACK] {email} -> {reset_link}")
             return render_template(
                 "forgot_password.html",
+                role_slug=requested_role,
                 reset_link=reset_link,
                 success_message="Reset link generated. Use the link below.",
             )
         
         flash("Email not found.", "warning")
     
-    return render_template("forgot_password.html")
+    return render_template("forgot_password.html", role_slug=requested_role)
 
 
 @app.route("/reset-password", methods=["GET", "POST"])

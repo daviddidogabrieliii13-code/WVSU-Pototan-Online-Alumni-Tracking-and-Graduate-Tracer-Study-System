@@ -32,7 +32,7 @@
 
             <footer class="auth-footer">
                 <p>Need director access? <a href="{{ portal_register_url }}">Register here</a></p>
-                <p><a href="{{ url_for('forgot_password') }}">Forgot your password?</a></p>
+                <p><a href="{{ url_for('forgot_password', role=role_slug) }}">Forgot your password?</a></p>
             </footer>
         </article>
     </div>
