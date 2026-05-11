@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = current_user.is_authenticated %}
 
 {% block title %}Events - WVSU Alumni System{% endblock %}
 

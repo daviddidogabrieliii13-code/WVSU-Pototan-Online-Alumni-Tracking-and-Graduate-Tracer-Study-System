@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}Alumni Module Profile - WVSU Alumni System{% endblock %}
 
@@ -12,20 +13,7 @@
     </div>
 </div>
 
-<div class="dashboard-layout">
-    <aside class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-        <div class="sidebar-profile">
-            <div class="sidebar-avatar">
-                <img src="{{ profile_photo_url(profile) }}" alt="Profile photo">
-            </div>
-            <h4>{{ profile.first_name or 'Alumni' }} {{ profile.last_name or '' }}</h4>
-            <p>{{ profile.degree or 'Degree not set' }}</p>
-        </div>
-    </aside>
-
-    <main class="main-content">
-        <section class="profile-header">
+<section class="profile-header">
             <div class="profile-header-content">
                 <div class="profile-avatar-large">
                     <img src="{{ profile_photo_url(profile) }}" alt="Profile photo">
@@ -90,6 +78,4 @@
         <a href="{{ url_for('alumni_module_form') }}" class="btn btn-primary">
             <i class="fas fa-edit"></i> Edit 4-Part Form
         </a>
-    </main>
-</div>
 {% endblock %}

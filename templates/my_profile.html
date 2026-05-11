@@ -1,15 +1,10 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}My Profile - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard-layout">
-    <div class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-    </div>
-    
-    <div class="main-content">
-        <div class="profile-header">
+<div class="profile-header">
             <div class="profile-header-content">
                 <div class="profile-avatar-large">
                     <img src="{{ profile_photo_url(profile) }}" alt="Profile photo">
@@ -159,6 +154,4 @@
         </a>
 
         {% include '_dashboard_notifications.html' %}
-    </div>
-</div>
 {% endblock %}

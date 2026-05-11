@@ -1,15 +1,10 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}My Survey - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard-layout">
-    <div class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-    </div>
-    
-    <div class="main-content">
-        <div class="dashboard-header">
+<div class="dashboard-header">
             <h1><i class="fas fa-poll"></i> My Graduate Tracer Survey</h1>
         </div>
         
@@ -136,6 +131,4 @@
         {% endif %}
 
         {% include '_dashboard_notifications.html' %}
-    </div>
-</div>
 {% endblock %}

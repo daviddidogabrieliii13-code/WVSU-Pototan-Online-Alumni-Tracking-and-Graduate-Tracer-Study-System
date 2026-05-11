@@ -1,26 +1,12 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}Alumni Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
 {% set profile_completion = ((current_user.profile.profile_completed | int) * 100) if current_user.profile else 0 %}
 {% set survey_completed = current_user.profile.survey_completed if current_user.profile else false %}
-<div class="dashboard-layout">
-    <aside class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-        {% if current_user.profile %}
-        <div class="sidebar-profile">
-            <div class="sidebar-avatar">
-                <img src="{{ profile_photo_url(current_user.profile) }}" alt="Profile photo">
-            </div>
-            <h4>{{ current_user.profile.first_name or 'Alumni' }} {{ current_user.profile.last_name or '' }}</h4>
-            <p>{{ current_user.profile.degree or 'Degree not set' }}</p>
-        </div>
-        {% endif %}
-    </aside>
-
-    <main class="main-content">
-        <section class="portal-hero" data-portal="alumni">
+<section class="portal-hero" data-portal="alumni">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
                     <i class="fas fa-user-graduate"></i>
@@ -35,12 +21,6 @@
                         <span class="portal-tag">Survey</span>
                         <span class="portal-tag">Jobs</span>
                     </div>
-                </div>
-                <div class="portal-hero-actions">
-                    <a href="{{ url_for('alumni_module_dashboard') }}" class="btn btn-outline btn-sm">Module Dashboard</a>
-                    <a href="{{ url_for('alumni_module_form') }}" class="btn btn-primary btn-sm">Open 4-Part Form</a>
-                    <a href="{{ url_for('profile') }}" class="btn btn-primary btn-sm">Update Profile</a>
-                    <a href="{{ url_for('survey') }}" class="btn btn-outline btn-sm">Take Survey</a>
                 </div>
             </div>
         </section>
@@ -120,6 +100,4 @@
         </div>
 
         {% include '_dashboard_notifications.html' %}
-    </main>
-</div>
 {% endblock %}

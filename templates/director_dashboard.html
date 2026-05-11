@@ -1,15 +1,10 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}Director Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard-layout">
-    <aside class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-    </aside>
-
-    <main class="main-content">
-        <section class="portal-hero" data-portal="director">
+<section class="portal-hero" data-portal="director">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
                     <i class="fas fa-chart-line"></i>
@@ -23,10 +18,6 @@
                         <span class="portal-tag">Reports</span>
                         <span class="portal-tag">Outcomes</span>
                     </div>
-                </div>
-                <div class="portal-hero-actions">
-                    <a href="{{ url_for('analytics') }}" class="btn btn-primary btn-sm">Open Analytics</a>
-                    <a href="{{ url_for('admin_surveys') }}" class="btn btn-outline btn-sm">Survey Insights</a>
                 </div>
             </div>
         </section>
@@ -98,6 +89,4 @@
         </div>
 
         {% include '_dashboard_notifications.html' %}
-    </main>
-</div>
 {% endblock %}

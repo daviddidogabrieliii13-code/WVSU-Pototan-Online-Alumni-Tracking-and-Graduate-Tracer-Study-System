@@ -1,13 +1,10 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}{% if event %}Edit Event{% else %}Add Event{% endif %} - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard-layout">
-    {% include 'admin_sidebar.html' %}
-    
-    <div class="main-content">
-        <div class="dashboard-header">
+<div class="dashboard-header">
             <h1><i class="fas fa-calendar"></i> {% if event %}Edit Event{% else %}Add New Event{% endif %}</h1>
         </div>
         
@@ -67,6 +64,4 @@
                 <a href="{{ url_for('admin_events') }}" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
-    </div>
-</div>
 {% endblock %}

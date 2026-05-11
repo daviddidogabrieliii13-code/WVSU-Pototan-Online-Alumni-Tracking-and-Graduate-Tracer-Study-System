@@ -114,7 +114,18 @@
     {% endwith %}
 
     <main>
+        {% if current_user.is_authenticated and use_dashboard_layout | default(false) %}
+        <div class="dashboard-layout dashboard-shell-layout">
+            {% include '_dashboard_sidebar.html' %}
+            <div class="main-content dashboard-shell-content">
+        {% endif %}
+
         {% block content %}{% endblock %}
+
+        {% if current_user.is_authenticated and use_dashboard_layout | default(false) %}
+            </div>
+        </div>
+        {% endif %}
     </main>
 
     <footer class="footer">

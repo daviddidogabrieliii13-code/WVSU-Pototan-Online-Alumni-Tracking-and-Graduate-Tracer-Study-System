@@ -1,15 +1,10 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}OSA Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard-layout">
-    <aside class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-    </aside>
-
-    <main class="main-content">
-        <section class="portal-hero" data-portal="osa">
+<section class="portal-hero" data-portal="osa">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
                     <i class="fas fa-calendar-check"></i>
@@ -23,10 +18,6 @@
                         <span class="portal-tag">RSVPs</span>
                         <span class="portal-tag">Feedback</span>
                     </div>
-                </div>
-                <div class="portal-hero-actions">
-                    <a href="{{ url_for('admin_events') }}" class="btn btn-primary btn-sm">Manage Events</a>
-                    <a href="{{ url_for('admin_event_rsvp_analytics') }}" class="btn btn-outline btn-sm">View RSVPs</a>
                 </div>
             </div>
         </section>
@@ -98,6 +89,4 @@
         </div>
 
         {% include '_dashboard_notifications.html' %}
-    </main>
-</div>
 {% endblock %}

@@ -1,0 +1,24 @@
+<aside class="sidebar dashboard-sidebar" aria-label="{{ role_display_name(current_role) if current_role else 'Portal' }} navigation">
+    {% include '_sidebar_nav_sections.html' %}
+
+    <div class="sidebar-profile">
+        <div class="sidebar-avatar">
+            {% if current_user.profile %}
+            <img src="{{ profile_photo_url(current_user.profile) }}" alt="Profile photo">
+            {% else %}
+            <span>{{ (role_display_name(current_role) if current_role else 'Portal')[:2].upper() }}</span>
+            {% endif %}
+        </div>
+        <h4>
+            {% if current_user.profile %}
+                {{ current_user.profile.first_name or 'Alumni' }} {{ current_user.profile.last_name or '' }}
+            {% else %}
+                {{ current_user.email }}
+            {% endif %}
+        </h4>
+        <p>{{ role_display_name(current_role) if current_role else 'Portal' }} Portal</p>
+        {% if current_user.profile and current_user.profile.degree %}
+        <p class="text-muted dashboard-class-year">{{ current_user.profile.degree }}</p>
+        {% endif %}
+    </div>
+</aside>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}Alumni 4-Part Form - WVSU Alumni System{% endblock %}
 
@@ -12,20 +13,7 @@
     </div>
 </div>
 
-<div class="dashboard-layout">
-    <aside class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-        <div class="sidebar-profile">
-            <div class="sidebar-avatar">
-                <img src="{{ profile_photo_url(profile) }}" alt="Profile photo">
-            </div>
-            <h4>{{ profile.first_name or 'Alumni' }} {{ profile.last_name or '' }}</h4>
-            <p>{{ profile.degree or 'Degree not set' }}</p>
-        </div>
-    </aside>
-
-    <main class="main-content">
-        <section class="form-section">
+<section class="form-section">
             <div class="module-form-header">
                 <div>
                     <h3 class="form-section-title"><i class="fas fa-layer-group"></i> Alumni Form Sections</h3>
@@ -330,6 +318,4 @@
                 </div>
             </form>
         </section>
-    </main>
-</div>
 {% endblock %}

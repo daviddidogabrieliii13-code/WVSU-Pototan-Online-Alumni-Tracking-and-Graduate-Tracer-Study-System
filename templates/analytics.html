@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}Analytics - WVSU Alumni System{% endblock %}
 
@@ -63,143 +64,203 @@
 {% block extra_js %}
 <script>
 (() => {
-    const commonLegend = {
-        labels: {
-            boxWidth: 14,
-            color: '#4f618a',
-            font: { family: 'Outfit', size: 12 }
+    const charts = [];
+    const chartData = {
+        employment: [{{ employed }}, {{ unemployed }}, {{ self_employed }}, {{ student }}],
+        years: {{ years|tojson }},
+        graduatesByYear: {{ graduates_by_year|tojson }},
+        degrees: {{ degrees|tojson }},
+        degreeCounts: {{ degrees_count|tojson }},
+        ratings: [{{ avg_education }}, {{ avg_curriculum }}, {{ avg_facilities }}, {{ avg_satisfaction }}, {{ avg_recommend }}]
+    };
+
+    function themeToken(name, fallbackName) {
+        const styles = getComputedStyle(document.documentElement);
+        return styles.getPropertyValue(name).trim() || styles.getPropertyValue(fallbackName).trim();
+    }
+
+    function getChartTheme() {
+        return {
+            text: themeToken('--chart-text', '--text-secondary'),
+            grid: themeToken('--chart-grid', '--visible-border'),
+            primary: themeToken('--chart-primary', '--primary'),
+            primaryStrong: themeToken('--chart-primary-strong', '--primary-dark'),
+            accent: themeToken('--chart-accent', '--accent-electric'),
+            success: themeToken('--chart-success', '--success'),
+            warning: themeToken('--chart-warning', '--warning'),
+            danger: themeToken('--chart-danger', '--danger'),
+            info: themeToken('--chart-info', '--info'),
+            fill: themeToken('--chart-fill', '--primary-light'),
+            pointBorder: themeToken('--chart-point-border', '--bg-surface'),
+            fontFamily: themeToken('--font-body', '--font-heading')
+        };
+    }
+
+    function destroyCharts() {
+        while (charts.length) {
+            charts.pop().destroy();
         }
-    };
+    }
 
-    const smoothAnimation = {
-        duration: 1200,
-        easing: 'easeOutQuart'
-    };
+    function renderCharts() {
+        destroyCharts();
 
-    new Chart(document.getElementById('employmentChart'), {
-        type: 'doughnut',
-        data: {
-            labels: ['Employed', 'Unemployed', 'Self-Employed', 'Student'],
-            datasets: [{
-                data: [{{ employed }}, {{ unemployed }}, {{ self_employed }}, {{ student }}],
-                borderWidth: 2,
-                borderColor: '#ffffff',
-                backgroundColor: ['#0f4cb7', '#b42318', '#c89b2d', '#3f6fa8'],
-                hoverOffset: 12
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: smoothAnimation,
-            plugins: {
-                legend: { ...commonLegend, position: 'bottom' }
+        const theme = getChartTheme();
+        const commonLegend = {
+            labels: {
+                boxWidth: 14,
+                color: theme.text,
+                font: { family: theme.fontFamily, size: 12 }
             }
+        };
+        const smoothAnimation = {
+            duration: 1200,
+            easing: 'easeOutQuart'
+        };
+        const employmentCanvas = document.getElementById('employmentChart');
+        const graduatesCanvas = document.getElementById('graduatesChart');
+        const degreesCanvas = document.getElementById('degreesChart');
+        const ratingsCanvas = document.getElementById('ratingsChart');
+
+        if (!employmentCanvas || !graduatesCanvas || !degreesCanvas || !ratingsCanvas) {
+            return;
         }
-    });
 
-    const graduatesCtx = document.getElementById('graduatesChart').getContext('2d');
-    const barGradient = graduatesCtx.createLinearGradient(0, 0, 0, 320);
-    barGradient.addColorStop(0, '#2a70de');
-    barGradient.addColorStop(1, '#0f4cb7');
-
-    new Chart(graduatesCtx, {
-        type: 'bar',
-        data: {
-            labels: {{ years|tojson }},
-            datasets: [{
-                label: 'Graduates',
-                data: {{ graduates_by_year|tojson }},
-                backgroundColor: barGradient,
-                borderRadius: 10,
-                maxBarThickness: 44
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: smoothAnimation,
-            plugins: {
-                legend: { display: false }
+        charts.push(new Chart(employmentCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Employed', 'Unemployed', 'Self-Employed', 'Student'],
+                datasets: [{
+                    data: chartData.employment,
+                    borderWidth: 2,
+                    borderColor: theme.pointBorder,
+                    backgroundColor: [theme.success, theme.danger, theme.warning, theme.info],
+                    hoverOffset: 12
+                }]
             },
-            scales: {
-                x: {
-                    ticks: { color: '#5a6f98' },
-                    grid: { display: false }
-                },
-                y: {
-                    beginAtZero: true,
-                    ticks: { color: '#5a6f98', precision: 0 },
-                    grid: { color: 'rgba(24, 53, 107, 0.10)' }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: smoothAnimation,
+                plugins: {
+                    legend: { ...commonLegend, position: 'bottom' }
                 }
             }
-        }
-    });
+        }));
 
-    new Chart(document.getElementById('degreesChart'), {
-        type: 'pie',
-        data: {
-            labels: {{ degrees|tojson }},
-            datasets: [{
-                data: {{ degrees_count|tojson }},
-                borderWidth: 2,
-                borderColor: '#ffffff',
-                backgroundColor: ['#0f4cb7', '#2d6dd2', '#3f87dd', '#c89b2d', '#d5b25c', '#264f8f']
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: smoothAnimation,
-            plugins: {
-                legend: { ...commonLegend, position: 'bottom' }
-            }
-        }
-    });
+        const graduatesCtx = graduatesCanvas.getContext('2d');
+        const barGradient = graduatesCtx.createLinearGradient(0, 0, 0, 320);
+        barGradient.addColorStop(0, theme.primary);
+        barGradient.addColorStop(1, theme.primaryStrong);
 
-    new Chart(document.getElementById('ratingsChart'), {
-        type: 'radar',
-        data: {
-            labels: ['Education Quality', 'Curriculum', 'Facilities', 'Satisfaction', 'Recommend'],
-            datasets: [{
-                label: 'Average Rating',
-                data: [{{ avg_education }}, {{ avg_curriculum }}, {{ avg_facilities }}, {{ avg_satisfaction }}, {{ avg_recommend }}],
-                backgroundColor: 'rgba(15, 76, 183, 0.20)',
-                borderColor: '#0f4cb7',
-                pointBackgroundColor: '#c89b2d',
-                pointBorderColor: '#ffffff',
-                pointRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: smoothAnimation,
-            plugins: {
-                legend: { display: false }
+        charts.push(new Chart(graduatesCtx, {
+            type: 'bar',
+            data: {
+                labels: chartData.years,
+                datasets: [{
+                    label: 'Graduates',
+                    data: chartData.graduatesByYear,
+                    backgroundColor: barGradient,
+                    borderRadius: 10,
+                    maxBarThickness: 44
+                }]
             },
-            scales: {
-                r: {
-                    suggestedMin: 0,
-                    suggestedMax: 5,
-                    ticks: {
-                        stepSize: 1,
-                        color: '#5671a3'
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: smoothAnimation,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: theme.text },
+                        grid: { display: false }
                     },
-                    grid: {
-                        color: 'rgba(21, 56, 116, 0.14)'
-                    },
-                    angleLines: {
-                        color: 'rgba(21, 56, 116, 0.14)'
-                    },
-                    pointLabels: {
-                        color: '#324f86',
-                        font: { family: 'Outfit', size: 12 }
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: theme.text, precision: 0 },
+                        grid: { color: theme.grid }
                     }
                 }
             }
-        }
-    });
+        }));
+
+        charts.push(new Chart(degreesCanvas, {
+            type: 'pie',
+            data: {
+                labels: chartData.degrees,
+                datasets: [{
+                    data: chartData.degreeCounts,
+                    borderWidth: 2,
+                    borderColor: theme.pointBorder,
+                    backgroundColor: [
+                        theme.primaryStrong,
+                        theme.primary,
+                        theme.info,
+                        theme.accent,
+                        theme.warning,
+                        theme.success
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: smoothAnimation,
+                plugins: {
+                    legend: { ...commonLegend, position: 'bottom' }
+                }
+            }
+        }));
+
+        charts.push(new Chart(ratingsCanvas, {
+            type: 'radar',
+            data: {
+                labels: ['Education Quality', 'Curriculum', 'Facilities', 'Satisfaction', 'Recommend'],
+                datasets: [{
+                    label: 'Average Rating',
+                    data: chartData.ratings,
+                    backgroundColor: theme.fill,
+                    borderColor: theme.primaryStrong,
+                    pointBackgroundColor: theme.accent,
+                    pointBorderColor: theme.pointBorder,
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: smoothAnimation,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    r: {
+                        suggestedMin: 0,
+                        suggestedMax: 5,
+                        ticks: {
+                            stepSize: 1,
+                            color: theme.text
+                        },
+                        grid: {
+                            color: theme.grid
+                        },
+                        angleLines: {
+                            color: theme.grid
+                        },
+                        pointLabels: {
+                            color: theme.text,
+                            font: { family: theme.fontFamily, size: 12 }
+                        }
+                    }
+                }
+            }
+        }));
+    }
+
+    renderCharts();
+    window.addEventListener('themechange', renderCharts);
 })();
 </script>
 {% endblock %}

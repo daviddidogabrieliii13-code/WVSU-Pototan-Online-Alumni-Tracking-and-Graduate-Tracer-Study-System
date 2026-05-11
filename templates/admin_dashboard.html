@@ -1,15 +1,10 @@
 {% extends "base.html" %}
+{% set use_dashboard_layout = true %}
 
 {% block title %}Admin Dashboard - WVSU Alumni System{% endblock %}
 
 {% block content %}
-<div class="dashboard-layout">
-    <aside class="sidebar">
-        {% include '_sidebar_nav_sections.html' %}
-    </aside>
-
-    <main class="main-content">
-        <section class="portal-hero" data-portal="admin">
+<section class="portal-hero" data-portal="admin">
             <div class="portal-hero-inner">
                 <div class="portal-hero-icon">
                     <i class="fas fa-user-shield"></i>
@@ -23,11 +18,6 @@
                         <span class="portal-tag">Surveys</span>
                         <span class="portal-tag">Analytics</span>
                     </div>
-                </div>
-                <div class="portal-hero-actions">
-                    <a href="{{ url_for('analytics') }}" class="btn btn-primary btn-sm">Open Analytics</a>
-                    <a href="{{ url_for('admin_alumni') }}" class="btn btn-outline btn-sm">Manage Alumni</a>
-                    <a href="{{ url_for('admin_account_approvals') }}" class="btn btn-outline btn-sm">Account Approvals</a>
                 </div>
             </div>
         </section>
@@ -194,6 +184,4 @@
                 {% endif %}
             </div>
         </div>
-    </main>
-</div>
 {% endblock %}
